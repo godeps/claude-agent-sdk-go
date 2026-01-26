@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/M1n9X/claude-agent-sdk-go/internal/log"
-	"github.com/M1n9X/claude-agent-sdk-go/types"
+	"github.com/godeps/claude-agent-sdk-go/internal/log"
+	"github.com/godeps/claude-agent-sdk-go/types"
 )
 
 // mockTransport implements a mock transport for testing.

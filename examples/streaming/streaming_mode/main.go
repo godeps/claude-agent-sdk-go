@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	claude "github.com/M1n9X/claude-agent-sdk-go"
-	"github.com/M1n9X/claude-agent-sdk-go/types"
+	claude "github.com/godeps/claude-agent-sdk-go"
+	"github.com/godeps/claude-agent-sdk-go/types"
 )
 
 // StreamingMode demonstrates various patterns for building applications with the Claude SDK streaming interface.

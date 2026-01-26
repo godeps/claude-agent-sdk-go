@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/M1n9X/claude-agent-sdk-go/types"
+	"github.com/godeps/claude-agent-sdk-go/types"
 )
 
 // SdkMCPServer implements an in-process MCP server for executing tools.

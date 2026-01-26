@@ -172,10 +172,10 @@ Tests are designed to run in parallel when possible using `t.Parallel()`.
 
 ### Coverage by Package
 ```
-github.com/M1n9X/claude-agent-sdk-go            - Public API
-github.com/M1n9X/claude-agent-sdk-go/internal   - Core logic
-github.com/M1n9X/claude-agent-sdk-go/internal/transport - Transport layer
-github.com/M1n9X/claude-agent-sdk-go/internal/types - Type definitions
+github.com/godeps/claude-agent-sdk-go            - Public API
+github.com/godeps/claude-agent-sdk-go/internal   - Core logic
+github.com/godeps/claude-agent-sdk-go/internal/transport - Transport layer
+github.com/godeps/claude-agent-sdk-go/internal/types - Type definitions
 ```
 
 ## Mock CLI Behavior

@@ -298,8 +298,8 @@ import (
     "fmt"
     "sync"
     
-    claude "github.com/M1n9X/claude-agent-sdk-go"
-    "github.com/M1n9X/claude-agent-sdk-go/types"
+    claude "github.com/godeps/claude-agent-sdk-go"
+    "github.com/godeps/claude-agent-sdk-go/types"
 )
 
 func main() {
@@ -377,8 +377,8 @@ import (
     "fmt"
     "sync"
     
-    claude "github.com/M1n9X/claude-agent-sdk-go"
-    "github.com/M1n9X/claude-agent-sdk-go/types"
+    claude "github.com/godeps/claude-agent-sdk-go"
+    "github.com/godeps/claude-agent-sdk-go/types"
 )
 
 func main() {
@@ -466,8 +466,8 @@ import (
     "fmt"
     "sync"
     
-    claude "github.com/M1n9X/claude-agent-sdk-go"
-    "github.com/M1n9X/claude-agent-sdk-go/types"
+    claude "github.com/godeps/claude-agent-sdk-go"
+    "github.com/godeps/claude-agent-sdk-go/types"
 )
 
 func main() {

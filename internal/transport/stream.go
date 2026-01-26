@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"io"
 
-	"github.com/M1n9X/claude-agent-sdk-go/types"
+	"github.com/godeps/claude-agent-sdk-go/types"
 )
 
 const (

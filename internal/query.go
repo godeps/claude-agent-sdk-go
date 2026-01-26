@@ -8,10 +8,10 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/M1n9X/claude-agent-sdk-go/internal/log"
-	"github.com/M1n9X/claude-agent-sdk-go/internal/mcp"
-	"github.com/M1n9X/claude-agent-sdk-go/internal/transport"
-	"github.com/M1n9X/claude-agent-sdk-go/types"
+	"github.com/godeps/claude-agent-sdk-go/internal/log"
+	"github.com/godeps/claude-agent-sdk-go/internal/mcp"
+	"github.com/godeps/claude-agent-sdk-go/internal/transport"
+	"github.com/godeps/claude-agent-sdk-go/types"
 )
 
 // Query manages bidirectional control message handling.

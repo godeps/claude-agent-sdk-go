@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	claude "github.com/M1n9X/claude-agent-sdk-go"
-	"github.com/M1n9X/claude-agent-sdk-go/types"
+	claude "github.com/godeps/claude-agent-sdk-go"
+	"github.com/godeps/claude-agent-sdk-go/types"
 )
 
 // StreamingModeIPython demonstrates IPython-friendly code snippets for Claude SDK streaming mode.
