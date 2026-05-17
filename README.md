@@ -196,13 +196,107 @@ Control which tools Claude can use:
 - `PermissionModeBypassPermissions`: Allow all tools (use with caution)
 
 ```go
-// Custom permission callback
+// Custom permission callback with full context
 opts := types.NewClaudeAgentOptions().
+    WithPermissionMode(types.PermissionModeDefault).
     WithCanUseTool(func(ctx context.Context, toolName string, input map[string]interface{}, permCtx types.ToolPermissionContext) (interface{}, error) {
-        // Implement custom permission logic
-        return &types.PermissionResultAllow{Behavior: "allow"}, nil
+        // Access rich permission context (Python SDK parity)
+        fmt.Printf("Tool: %s (ID: %s)\n", toolName, permCtx.ToolUseID)
+        fmt.Printf("Display: %s — %s\n", permCtx.DisplayName, permCtx.Description)
+        fmt.Printf("Reason: %s\n", permCtx.DecisionReason)
+
+        // Allow read-only tools
+        if toolName == "Read" || toolName == "Grep" {
+            return types.PermissionResultAllow{Behavior: "allow"}, nil
+        }
+
+        // Deny dangerous operations
+        if toolName == "Bash" {
+            cmd, _ := input["command"].(string)
+            if strings.Contains(cmd, "rm -rf") {
+                return types.PermissionResultDeny{
+                    Behavior: "deny",
+                    Message:  "Dangerous command blocked",
+                    Interrupt: true,  // stop execution entirely
+                }, nil
+            }
+        }
+
+        // Rewrite tool input before execution
+        if toolName == "Write" {
+            filePath, _ := input["file_path"].(string)
+            updated := make(map[string]interface{})
+            for k, v := range input { updated[k] = v }
+            updated["file_path"] = "/safe/" + filePath
+            return types.PermissionResultAllow{
+                Behavior:     "allow",
+                UpdatedInput: &updated,
+            }, nil
+        }
+
+        // Auto-apply CLI permission suggestions
+        if len(permCtx.Suggestions) > 0 {
+            return types.PermissionResultAllow{
+                Behavior:           "allow",
+                UpdatedPermissions: permCtx.Suggestions,
+            }, nil
+        }
+
+        return types.PermissionResultAllow{Behavior: "allow"}, nil
     })
 ```
+
+**ToolPermissionContext fields** (full Python SDK parity):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ToolUseID` | `string` | Unique identifier for this tool invocation |
+| `AgentID` | `string` | ID of the agent requesting permission |
+| `Title` | `string` | Human-readable tool title |
+| `DisplayName` | `string` | Display name shown to users |
+| `Description` | `string` | Tool description |
+| `BlockedPath` | `string` | File path that triggered the permission check |
+| `DecisionReason` | `string` | Why the CLI is asking for permission (e.g. "Path is outside allowed working directories") |
+| `Suggestions` | `[]PermissionUpdate` | Suggested permission rules from the CLI |
+| `Signal` | `interface{}` | Reserved for future abort signal support |
+
+See [examples/permissions/permission_callback_complete](examples/permissions/permission_callback_complete/main.go) for a complete real-world example.
+
+### Tool Handler (Intercepting Tool Execution)
+
+Register handlers that intercept tool calls before the CLI executes them. This enables building custom UIs, forwarding questions to web frontends, or programmatic tool execution.
+
+**Callback mode** — handler is called directly:
+```go
+opts := types.NewClaudeAgentOptions().
+    WithToolHandler("AskUserQuestion", func(ctx context.Context, req types.ToolHandlerRequest) (*types.ToolResult, error) {
+        fmt.Printf("Tool: %s, Input: %v\n", req.ToolName, req.Input)
+        return types.NewMcpToolResult(types.TextBlock{Type: "text", Text: "user answer"}), nil
+    })
+```
+
+**Event-stream mode** — receive `ToolExecutionRequest` via `ReceiveResponse()`, submit result asynchronously:
+```go
+opts := types.NewClaudeAgentOptions().
+    WithToolHandler("AskUserQuestion", nil) // nil = event-stream mode
+
+client, _ := claude.NewClient(ctx, opts)
+client.Connect(ctx)
+client.Query(ctx, "Ask me a question")
+
+for msg := range client.ReceiveResponse(ctx) {
+    switch m := msg.(type) {
+    case *types.ToolExecutionRequest:
+        // Forward to web frontend, collect answer, then submit
+        result := types.NewMcpToolResult(types.TextBlock{Type: "text", Text: "blue"})
+        client.SubmitToolResult(ctx, m.ToolUseID, result)
+    case *types.AssistantMessage:
+        // Handle response
+    }
+}
+```
+
+See [examples/tool_handler](examples/tool_handler/main.go) for both modes.
 
 ### Hook System
 
@@ -323,6 +417,157 @@ messages, _ := claude.Query(ctx, "Greet Alice", opts)
 ```
 
 See [examples/mcp/decorator_style_tools](examples/mcp/decorator_style_tools/main.go) for complete examples.
+
+### Middleware System
+
+Wrap queries with cross-cutting concerns like logging, rate limiting, and cost tracking:
+
+```go
+sdk := claude.NewSDK(
+    claude.AuditLogMiddleware(slog.Default()),    // log every query
+    claude.TimeoutMiddleware(5 * time.Minute),     // per-query timeout
+    claude.RateLimitMiddleware(3),                 // max 3 concurrent queries
+    claude.CostGuardMiddleware(10.0, func(spent float64) {
+        log.Printf("Budget exceeded: $%.2f spent", spent)
+    }),
+)
+
+messages, _ := sdk.Query(ctx, "Hello", opts)
+```
+
+### Typed Queries (Generics)
+
+Deserialize structured output directly into Go structs using generics:
+
+```go
+type Analysis struct {
+    Summary    string   `json:"summary"`
+    Issues     []string `json:"issues"`
+    Confidence float64  `json:"confidence"`
+}
+
+result, meta, err := claude.QueryTyped[Analysis](ctx, "Analyze this code for bugs", opts)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Summary: %s (confidence: %.0f%%)\n", result.Summary, result.Confidence*100)
+fmt.Printf("Cost: $%.4f, Turns: %d\n", meta.CostUSD, meta.NumTurns)
+```
+
+### Agent Pool (Fan-Out / Map-Reduce)
+
+Run multiple queries concurrently with controlled parallelism:
+
+```go
+pool := claude.NewAgentPool(5, opts) // 5 concurrent agents
+
+// Fan-out: send multiple prompts, collect all results
+results := pool.FanOut(ctx, []string{
+    "Summarize chapter 1",
+    "Summarize chapter 2",
+    "Summarize chapter 3",
+})
+
+// Map-Reduce: split work, then combine
+final, _ := pool.MapReduce(ctx, chapters,
+    func(item string) string { return "Summarize: " + item },
+    func(results []claude.AgentResult) string {
+        // Combine summaries into final prompt
+        return "Combine these summaries into one: ..."
+    },
+)
+```
+
+### Retry with Backoff
+
+Automatic retry for transient failures:
+
+```go
+opts := types.NewClaudeAgentOptions().
+    WithRetry(&types.RetryConfig{
+        MaxRetries:    3,
+        InitialDelay:  time.Second,
+        MaxDelay:      30 * time.Second,
+        BackoffFactor: 2.0,
+    })
+
+messages, _ := claude.QueryWithRetry(ctx, "Hello", opts)
+```
+
+### Authentication Providers
+
+Pluggable authentication for different API backends:
+
+```go
+// API key (default Anthropic)
+opts := types.NewClaudeAgentOptions().
+    WithAuthProvider(types.NewAPIKeyAuth("sk-..."))
+
+// Bearer token (e.g. DashScope, Azure)
+opts := types.NewClaudeAgentOptions().
+    WithAuthProvider(types.NewBearerTokenAuth("your-token"))
+
+// HMAC signing
+opts := types.NewClaudeAgentOptions().
+    WithAuthProvider(types.NewHMACAuth("key-id", "secret-key"))
+```
+
+### Third-Party API Compatibility
+
+Use the SDK with Claude-compatible APIs (e.g. DashScope, OpenRouter):
+
+```go
+opts := types.NewClaudeAgentOptions().
+    WithModel("glm-5.1").
+    WithBaseURL("https://dashscope.aliyuncs.com/apps/anthropic")
+```
+
+Or set via environment variables:
+```bash
+export ANTHROPIC_BASE_URL=https://dashscope.aliyuncs.com/apps/anthropic
+export ANTHROPIC_AUTH_TOKEN=your-token
+export LLM_MODEL=glm-5.1
+```
+
+### Event Callbacks
+
+Track tool usage and progress in real time:
+
+```go
+opts := types.NewClaudeAgentOptions().
+    WithOnToolEvent(func(event types.ToolEvent) {
+        fmt.Printf("[%s] Tool: %s (%.0fms)\n", event.Phase, event.ToolName, event.DurationMs)
+    }).
+    WithOnProgress(func(p types.Progress) {
+        fmt.Printf("Turn %d | Cost: $%.4f\n", p.NumTurns, p.CostUSD)
+    })
+```
+
+### Structured Logging
+
+Use `slog.Logger` for structured, leveled logging:
+
+```go
+logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+opts := types.NewClaudeAgentOptions().
+    WithLogger(logger)
+```
+
+### Session Utilities
+
+List and resume past sessions:
+
+```go
+sessions, _ := claude.ListSessions(ctx, opts)
+for _, s := range sessions {
+    fmt.Printf("Session %s: %s (model: %s)\n", s.ID, s.Summary, s.Model)
+}
+
+// Resume a session
+resumeOpts := claude.ResumeSession("session-id-here")
+client, _ := claude.NewClient(ctx, resumeOpts)
+```
 
 ## Error Handling
 
@@ -626,6 +871,10 @@ Check out the [examples directory](examples/) for detailed usage examples:
 ### Permission Examples
 - [With Permissions](examples/permissions/with_permissions/main.go) - Permission modes
 - [Tool Permission Callback](examples/permissions/tool_permission_callback/main.go) - Custom permission logic
+- [Permission Callback Complete](examples/permissions/permission_callback_complete/main.go) - Full permission context with audit logging, input rewriting, and deny/interrupt
+
+### Tool Handler Examples
+- [Tool Handler](examples/tool_handler/main.go) - Callback and event-stream tool interception
 
 ### Streaming Examples
 - [Streaming Mode](examples/streaming/streaming_mode/main.go) - Basic streaming

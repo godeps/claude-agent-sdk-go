@@ -63,8 +63,15 @@ type PermissionResultDeny struct {
 
 // ToolPermissionContext provides context for tool permission callbacks.
 type ToolPermissionContext struct {
-	Signal      interface{}        `json:"signal,omitempty"` // Future: abort signal support
-	Suggestions []PermissionUpdate `json:"suggestions,omitempty"`
+	Signal         interface{}        `json:"signal,omitempty"` // Future: abort signal support
+	Suggestions    []PermissionUpdate `json:"suggestions,omitempty"`
+	ToolUseID      string             `json:"tool_use_id,omitempty"`
+	AgentID        string             `json:"agent_id,omitempty"`
+	BlockedPath    string             `json:"blocked_path,omitempty"`
+	DecisionReason string             `json:"decision_reason,omitempty"`
+	Title          string             `json:"title,omitempty"`
+	DisplayName    string             `json:"display_name,omitempty"`
+	Description    string             `json:"description,omitempty"`
 }
 
 // HookEvent represents a hook event type.
@@ -333,6 +340,12 @@ type SDKControlPermissionRequest struct {
 	Input                 map[string]interface{} `json:"input"`
 	PermissionSuggestions []PermissionUpdate     `json:"permission_suggestions,omitempty"`
 	BlockedPath           *string                `json:"blocked_path,omitempty"`
+	ToolUseID             string                 `json:"tool_use_id,omitempty"`
+	AgentID               string                 `json:"agent_id,omitempty"`
+	DecisionReason        string                 `json:"decision_reason,omitempty"`
+	Title                 string                 `json:"title,omitempty"`
+	DisplayName           string                 `json:"display_name,omitempty"`
+	Description           string                 `json:"description,omitempty"`
 }
 
 // SDKControlInitializeRequest represents an initialization request.

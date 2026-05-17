@@ -412,7 +412,7 @@ func TestHandlePermissionRequest(t *testing.T) {
 			logger := log.NewLogger(false) // Non-verbose for tests
 			query := NewQuery(ctx, transport, opts, logger, true)
 
-			result, err := query.handlePermissionRequest(tt.requestData)
+			result, err := query.handlePermissionRequest(ctx, tt.requestData)
 			if tt.expectedError && err == nil {
 				t.Error("expected error but got none")
 			}
@@ -975,9 +975,153 @@ func TestCallbackTimeouts(t *testing.T) {
 	query.ctx = timeoutCtx
 
 	// This should timeout
-	_, err := query.handlePermissionRequest(requestData)
+	_, err := query.handlePermissionRequest(timeoutCtx, requestData)
 	if err == nil {
 		t.Error("expected timeout error")
+	}
+}
+
+// TestPermissionContextFieldsPassing verifies all ToolPermissionContext fields
+// are extracted from the wire data and passed to the canUseTool callback.
+func TestPermissionContextFieldsPassing(t *testing.T) {
+	ctx := context.Background()
+	transport := newMockTransport()
+
+	var receivedCtx types.ToolPermissionContext
+	var receivedToolName string
+
+	opts := types.NewClaudeAgentOptions().WithCanUseTool(
+		func(ctx context.Context, toolName string, input map[string]interface{}, permCtx types.ToolPermissionContext) (interface{}, error) {
+			receivedToolName = toolName
+			receivedCtx = permCtx
+			return types.PermissionResultAllow{Behavior: "allow"}, nil
+		},
+	)
+
+	logger := log.NewLogger(false)
+	query := NewQuery(ctx, transport, opts, logger, true)
+
+	requestData := map[string]interface{}{
+		"subtype":         "can_use_tool",
+		"tool_name":       "Bash",
+		"input":           map[string]interface{}{"command": "ls"},
+		"tool_use_id":     "toolu_abc123",
+		"agent_id":        "agent_456",
+		"blocked_path":    "/etc/shadow",
+		"decision_reason": "Hook returned ask",
+		"title":           "Claude wants to run: ls",
+		"display_name":    "Run command",
+		"description":     "Execute a bash command",
+		"permission_suggestions": []interface{}{
+			map[string]interface{}{
+				"type": "addRules",
+				"rules": []interface{}{
+					map[string]interface{}{
+						"toolName": "Bash",
+					},
+				},
+			},
+		},
+	}
+
+	reqCtx := context.Background()
+	result, err := query.handlePermissionRequest(reqCtx, requestData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result["behavior"] != "allow" {
+		t.Errorf("expected allow, got %v", result["behavior"])
+	}
+	if receivedToolName != "Bash" {
+		t.Errorf("tool name: got %q, want %q", receivedToolName, "Bash")
+	}
+	if receivedCtx.ToolUseID != "toolu_abc123" {
+		t.Errorf("ToolUseID: got %q, want %q", receivedCtx.ToolUseID, "toolu_abc123")
+	}
+	if receivedCtx.AgentID != "agent_456" {
+		t.Errorf("AgentID: got %q, want %q", receivedCtx.AgentID, "agent_456")
+	}
+	if receivedCtx.BlockedPath != "/etc/shadow" {
+		t.Errorf("BlockedPath: got %q, want %q", receivedCtx.BlockedPath, "/etc/shadow")
+	}
+	if receivedCtx.DecisionReason != "Hook returned ask" {
+		t.Errorf("DecisionReason: got %q, want %q", receivedCtx.DecisionReason, "Hook returned ask")
+	}
+	if receivedCtx.Title != "Claude wants to run: ls" {
+		t.Errorf("Title: got %q, want %q", receivedCtx.Title, "Claude wants to run: ls")
+	}
+	if receivedCtx.DisplayName != "Run command" {
+		t.Errorf("DisplayName: got %q, want %q", receivedCtx.DisplayName, "Run command")
+	}
+	if receivedCtx.Description != "Execute a bash command" {
+		t.Errorf("Description: got %q, want %q", receivedCtx.Description, "Execute a bash command")
+	}
+	if len(receivedCtx.Suggestions) != 1 {
+		t.Errorf("Suggestions: got %d, want 1", len(receivedCtx.Suggestions))
+	}
+}
+
+// TestHandleCancelRequest verifies that cancelling an in-flight permission request works.
+func TestHandleCancelRequest(t *testing.T) {
+	ctx := context.Background()
+	transport := newMockTransport()
+
+	callbackStarted := make(chan struct{})
+	callbackCtxCancelled := make(chan bool, 1)
+
+	opts := types.NewClaudeAgentOptions().WithCanUseTool(
+		func(ctx context.Context, toolName string, input map[string]interface{}, permCtx types.ToolPermissionContext) (interface{}, error) {
+			close(callbackStarted)
+			// Block until context is cancelled
+			<-ctx.Done()
+			callbackCtxCancelled <- true
+			return nil, ctx.Err()
+		},
+	)
+
+	logger := log.NewLogger(false)
+	query := NewQuery(ctx, transport, opts, logger, true)
+
+	// Simulate a permission request arriving
+	requestID := "req_cancel_test"
+	msg := &types.SystemMessage{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request: map[string]interface{}{
+			"subtype":   "can_use_tool",
+			"tool_name": "Bash",
+			"input":     map[string]interface{}{"command": "rm -rf /"},
+		},
+	}
+
+	// Launch the handler in a goroutine (like routeMessage does)
+	go query.handleControlRequest(msg)
+
+	// Wait for the callback to start
+	select {
+	case <-callbackStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for callback to start")
+	}
+
+	// Now cancel the request
+	query.inflightMu.Lock()
+	cancelFn, exists := query.inflightCancel[requestID]
+	query.inflightMu.Unlock()
+
+	if !exists {
+		t.Fatal("expected in-flight cancel entry for request")
+	}
+	cancelFn()
+
+	// Verify the callback's context was cancelled
+	select {
+	case cancelled := <-callbackCtxCancelled:
+		if !cancelled {
+			t.Error("expected callback context to be cancelled")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for callback cancellation")
 	}
 }
 

@@ -81,6 +81,12 @@ func Query(ctx context.Context, prompt string, options *types.ClaudeAgentOptions
 		}
 	}
 
+	// If ToolHandlers are provided, automatically set PermissionPromptToolName to "stdio"
+	if len(options.ToolHandlers) > 0 && options.PermissionPromptToolName == nil {
+		stdio := "stdio"
+		options.PermissionPromptToolName = &stdio
+	}
+
 	// Find Claude CLI path
 	cliPath := ""
 	if options.CLIPath != nil {

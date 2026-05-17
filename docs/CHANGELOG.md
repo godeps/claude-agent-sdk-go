@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Permission Context Parity & Tool Handler
+
+#### Permission Context — Full Python SDK Parity
+- Expanded `ToolPermissionContext` with 7 new fields: `ToolUseID`, `AgentID`, `BlockedPath`, `DecisionReason`, `Title`, `DisplayName`, `Description`
+- Expanded `SDKControlPermissionRequest` with matching wire-protocol fields
+- Full field extraction in `handlePermissionRequest` — all context from CLI is now passed to callbacks
+- Added `control_cancel_request` support for cancelling in-flight permission requests
+
+#### Tool Handler System (New)
+- Added `ToolHandlerFunc` type for intercepting tool execution
+- Added `ToolExecutionRequest` message type for event-stream mode
+- Added `PermissionResultExecute` for returning pre-computed tool results
+- Added `WithToolHandler()` — register callback or event-stream handler per tool
+- Added `WithToolHandlerTimeout()` — configurable timeout for event-stream mode (default 5 minutes)
+- Added `Client.SubmitToolResult()` — submit results for event-stream tool requests
+- Added `AsToolExecutionRequest()` type helper
+
+#### Enhancement Features (P0–P3)
+- **Middleware System** (P0): `SDK` type with `NewSDK()`, `Middleware` type, composable query pipeline
+  - `AuditLogMiddleware` — structured logging of every query
+  - `TimeoutMiddleware` — per-query timeout enforcement
+  - `RateLimitMiddleware` — concurrent query limiting
+  - `CostGuardMiddleware` — cumulative cost tracking with budget enforcement
+- **Typed Queries** (P0): `QueryTyped[T]()` with auto-generated JSON schema from struct tags
+- **Agent Pool** (P0): `AgentPool` with `FanOut()` and `MapReduce()` for concurrent queries
+- **Event Callbacks** (P1): `WithOnToolEvent()` and `WithOnProgress()` for real-time tracking
+- **Structured Logging** (P1): `WithLogger()` for `slog.Logger` integration
+- **Retry** (P2): `QueryWithRetry()` with configurable `RetryConfig` (max retries, backoff, delay)
+- **Session Utilities** (P2): `ListSessions()` and `ResumeSession()` helpers
+- **Auth Providers** (P3): `AuthProvider` interface with `APIKeyAuth`, `BearerTokenAuth`, `HMACAuth`
+- **Cost Tracking** (P1): `Progress` type with `CostUSD`, `NumTurns`, `DurationMs`
+- **Tool Events** (P1): `ToolEvent` type with `Phase`, `ToolName`, `DurationMs`
+
+#### Examples
+- Added `examples/permissions/permission_callback_complete/` — complete permission callback with all context fields, audit logging, input rewriting, deny/interrupt, third-party API support
+- Added `examples/tool_handler/` — callback and event-stream tool interception patterns
+- Added `demo/` — comprehensive demo program showcasing all 11 enhancement features
+
+### Fixed
+- Aligned CLI flags with current Claude CLI: `--mcp-config` (was `--mcp-servers`), `--settings` (was `--settings-file`)
+
+### Changed
+- Module path updated to `github.com/godeps/claude-agent-sdk-go`
+- Permission callback now receives cancellable context for in-flight request support
+- `handlePermissionRequest` extracts all wire-protocol fields into `ToolPermissionContext`
+
+---
+
 ### Added - Complete Python SDK Alignment
 
 This release achieves **100% feature parity** with the official Python SDK.

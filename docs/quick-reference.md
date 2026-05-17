@@ -9,6 +9,11 @@ A concise reference for common Claude Agent SDK operations.
 - [Custom Tools](#custom-tools)
 - [Hooks](#hooks)
 - [Permissions](#permissions)
+- [Tool Handler](#tool-handler)
+- [Middleware](#middleware)
+- [Typed Queries](#typed-queries)
+- [Agent Pool](#agent-pool)
+- [Third-Party API](#third-party-api)
 - [Error Handling](#error-handling)
 - [Message Handling](#message-handling)
 
@@ -226,23 +231,34 @@ opts := types.NewClaudeAgentOptions().
 ### Custom Permission Callback
 ```go
 canUseTool := func(ctx context.Context, toolName string, input map[string]interface{}, permCtx types.ToolPermissionContext) (interface{}, error) {
+    // Full permission context available (Python SDK parity):
+    //   permCtx.ToolUseID      — unique tool invocation ID
+    //   permCtx.AgentID        — requesting agent ID
+    //   permCtx.Title          — tool title
+    //   permCtx.DisplayName    — display name
+    //   permCtx.Description    — tool description
+    //   permCtx.BlockedPath    — path that triggered the check
+    //   permCtx.DecisionReason — why permission is needed
+    //   permCtx.Suggestions    — CLI-suggested permission updates
+
     // Allow read-only tools
     if toolName == "Read" || toolName == "Grep" {
-        return &types.PermissionResultAllow{Behavior: "allow"}, nil
+        return types.PermissionResultAllow{Behavior: "allow"}, nil
     }
     
-    // Deny dangerous operations
+    // Deny with interrupt (stops execution entirely)
     if toolName == "Bash" {
         command := input["command"].(string)
         if strings.Contains(command, "rm -rf") {
-            return &types.PermissionResultDeny{
-                Behavior: "deny",
-                Message:  "Dangerous command blocked",
+            return types.PermissionResultDeny{
+                Behavior:  "deny",
+                Message:   "Dangerous command blocked",
+                Interrupt: true,
             }, nil
         }
     }
     
-    // Modify tool input
+    // Rewrite tool input before execution
     if toolName == "Write" {
         modifiedInput := make(map[string]interface{})
         for k, v := range input {
@@ -250,16 +266,116 @@ canUseTool := func(ctx context.Context, toolName string, input map[string]interf
         }
         modifiedInput["file_path"] = "/safe/" + input["file_path"].(string)
         
-        return &types.PermissionResultAllow{
+        return types.PermissionResultAllow{
             Behavior:     "allow",
             UpdatedInput: &modifiedInput,
         }, nil
     }
     
-    return &types.PermissionResultAllow{Behavior: "allow"}, nil
+    // Auto-apply CLI permission suggestions
+    if len(permCtx.Suggestions) > 0 {
+        return types.PermissionResultAllow{
+            Behavior:           "allow",
+            UpdatedPermissions: permCtx.Suggestions,
+        }, nil
+    }
+    
+    return types.PermissionResultAllow{Behavior: "allow"}, nil
 }
 
-opts := types.NewClaudeAgentOptions().WithCanUseTool(canUseTool)
+opts := types.NewClaudeAgentOptions().
+    WithPermissionMode(types.PermissionModeDefault).
+    WithCanUseTool(canUseTool)
+```
+
+## Tool Handler
+
+### Callback Mode (Direct Handler)
+```go
+opts := types.NewClaudeAgentOptions().
+    WithToolHandler("AskUserQuestion", func(ctx context.Context, req types.ToolHandlerRequest) (*types.ToolResult, error) {
+        fmt.Printf("Tool: %s, ID: %s, Input: %v\n", req.ToolName, req.ToolUseID, req.Input)
+        return types.NewMcpToolResult(types.TextBlock{Type: "text", Text: "answer"}), nil
+    })
+```
+
+### Event-Stream Mode (Async)
+```go
+opts := types.NewClaudeAgentOptions().
+    WithToolHandler("AskUserQuestion", nil). // nil = event-stream
+    WithToolHandlerTimeout(30 * time.Second) // optional timeout
+
+client, _ := claude.NewClient(ctx, opts)
+client.Connect(ctx)
+client.Query(ctx, "Ask me something")
+
+for msg := range client.ReceiveResponse(ctx) {
+    if req, ok := msg.(*types.ToolExecutionRequest); ok {
+        result := types.NewMcpToolResult(types.TextBlock{Type: "text", Text: "blue"})
+        client.SubmitToolResult(ctx, req.ToolUseID, result)
+    }
+}
+```
+
+## Middleware
+
+### Built-in Middleware
+```go
+sdk := claude.NewSDK(
+    claude.AuditLogMiddleware(slog.Default()),
+    claude.TimeoutMiddleware(5 * time.Minute),
+    claude.RateLimitMiddleware(3),
+    claude.CostGuardMiddleware(10.0, nil),
+)
+messages, _ := sdk.Query(ctx, "Hello", opts)
+```
+
+### Custom Middleware
+```go
+func myMiddleware(next claude.QueryFunc) claude.QueryFunc {
+    return func(ctx context.Context, prompt string, opts *types.ClaudeAgentOptions) (<-chan types.Message, error) {
+        log.Printf("Query: %s", prompt)
+        return next(ctx, prompt, opts)
+    }
+}
+sdk := claude.NewSDK(myMiddleware)
+```
+
+## Typed Queries
+
+```go
+type Review struct {
+    Score   int      `json:"score"`
+    Issues  []string `json:"issues"`
+}
+
+result, meta, _ := claude.QueryTyped[Review](ctx, "Review this code", opts)
+fmt.Printf("Score: %d, Cost: $%.4f\n", result.Score, meta.CostUSD)
+```
+
+## Agent Pool
+
+```go
+pool := claude.NewAgentPool(5, opts)
+
+// Fan-out
+results := pool.FanOut(ctx, []string{"Task 1", "Task 2", "Task 3"})
+
+// Map-Reduce
+final, _ := pool.MapReduce(ctx, items,
+    func(item string) string { return "Process: " + item },
+    func(results []claude.AgentResult) string { return "Summarize: ..." },
+)
+```
+
+## Third-Party API
+
+```go
+// DashScope / OpenRouter / Azure
+opts := types.NewClaudeAgentOptions().
+    WithModel("glm-5.1").
+    WithBaseURL("https://dashscope.aliyuncs.com/apps/anthropic").
+    WithAuthProvider(types.NewBearerTokenAuth("your-token"))
 ```
 
 ## Error Handling

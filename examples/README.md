@@ -112,6 +112,43 @@ This directory contains various examples demonstrating how to use the Claude Age
 - **Functionality**: Demonstrates how to set up and use various permission levels for tools.
 - **Run**: `cd examples/permissions/with_permissions && go run main.go`
 
+### permission_callback_complete
+
+- **Functionality**: Complete permission callback example demonstrating all `ToolPermissionContext` fields (Python SDK parity):
+  - Accessing ToolUseID, DisplayName, DecisionReason, Suggestions and all other context fields
+  - Decision-making based on tool name and context metadata
+  - Returning Allow with `UpdatedInput` (rewrite tool inputs) and `UpdatedPermissions`
+  - Returning Deny with `Message` and `Interrupt`
+  - Audit logging of every permission request
+  - Context cancellation handling
+  - Third-party API support via environment variables (`LLM_MODEL`, `ANTHROPIC_BASE_URL`)
+- **Run**: `cd examples/permissions/permission_callback_complete && go run main.go`
+- **Real-world output example**:
+  ```
+  +----- Permission Request -------------------------
+  | Tool:           Write
+  | ToolUseID:      toolu_tool-a61d274966af42569ace5a51a054dbed
+  | DisplayName:    Write
+  | DecisionReason: Path is outside allowed working directories
+  | Suggestions:    2
+  | Input keys:     [file_path content]
+  +--------------------------------------------------
+    -> ALLOW (rewritten path: /tmp/hello.txt -> /tmp/hello.txt.safe)
+  ```
+
+## Tool Handler Examples
+
+### tool_handler
+
+- **Functionality**: Demonstrates two patterns for intercepting tool execution:
+  - **Callback mode**: Register a handler function that is called directly when Claude invokes the tool — ideal for programmatic responses
+  - **Event-stream mode**: Register with `nil` handler; `ToolExecutionRequest` messages are emitted via `ReceiveResponse()` and results are submitted via `Client.SubmitToolResult()` — ideal for forwarding to web UIs
+- **Run**:
+  ```bash
+  cd examples/tool_handler && go run main.go callback
+  cd examples/tool_handler && go run main.go eventstream
+  ```
+
 ## Utilities Examples
 
 ### include_partial_messages

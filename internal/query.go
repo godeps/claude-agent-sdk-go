@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/godeps/claude-agent-sdk-go/internal/log"
 	"github.com/godeps/claude-agent-sdk-go/internal/mcp"
@@ -31,10 +32,20 @@ type Query struct {
 	hookCallbacks      map[string]types.HookCallbackFunc
 	nextHookCallbackID int64
 
+	// In-flight control request cancellation
+	inflightMu     sync.Mutex
+	inflightCancel map[string]context.CancelFunc
+
 	// Callbacks
 	canUseTool types.CanUseToolFunc
 	hooks      map[types.HookEvent][]types.HookMatcher
 	mcpServers map[string]types.MCPServer
+
+	// Tool execution handlers
+	toolHandlers       map[string]types.ToolHandlerFunc
+	toolHandlerTimeout time.Duration
+	pendingToolResults map[string]chan *types.ToolResult
+	pendingMu          sync.Mutex
 
 	// Message handling
 	messagesChan     chan types.Message
@@ -66,22 +77,29 @@ func NewQuery(ctx context.Context, transport transport.Transport, opts *types.Cl
 	}
 
 	q := &Query{
-		transport:       transport,
-		ctx:             queryCtx,
-		cancel:          cancel,
-		logger:          logger,
-		requestMap:      make(map[string]chan responseResult),
-		hookCallbacks:   make(map[string]types.HookCallbackFunc),
-		messagesChan:    make(chan types.Message, capacity),
-		stopChan:        make(chan struct{}),
-		readLoopDone:    make(chan struct{}),
-		isStreamingMode: isStreamingMode,
-		mcpServers:      make(map[string]types.MCPServer),
+		transport:          transport,
+		ctx:                queryCtx,
+		cancel:             cancel,
+		logger:             logger,
+		requestMap:         make(map[string]chan responseResult),
+		hookCallbacks:      make(map[string]types.HookCallbackFunc),
+		inflightCancel:     make(map[string]context.CancelFunc),
+		messagesChan:       make(chan types.Message, capacity),
+		stopChan:           make(chan struct{}),
+		readLoopDone:       make(chan struct{}),
+		isStreamingMode:    isStreamingMode,
+		mcpServers:         make(map[string]types.MCPServer),
+		pendingToolResults: make(map[string]chan *types.ToolResult),
+		toolHandlerTimeout: 5 * time.Minute,
 	}
 
 	if opts != nil {
 		q.canUseTool = opts.CanUseTool
 		q.hooks = opts.Hooks
+		q.toolHandlers = opts.ToolHandlers
+		if opts.ToolHandlerTimeout != nil {
+			q.toolHandlerTimeout = *opts.ToolHandlerTimeout
+		}
 	}
 
 	q.eventTracker = NewEventTracker(opts, cancel)
@@ -254,6 +272,32 @@ func (q *Query) routeMessage(msg types.Message) error {
 		return types.NewControlProtocolError("invalid control_request message type")
 	}
 
+	// Handle control cancel requests
+	if msgType == "control_cancel_request" {
+		if sysMsg, ok := msg.(*types.SystemMessage); ok {
+			cancelID := sysMsg.RequestID
+			if cancelID == "" {
+				if sysMsg.Request != nil {
+					cancelID, _ = sysMsg.Request["request_id"].(string)
+				}
+			}
+			if cancelID != "" {
+				q.inflightMu.Lock()
+				cancelFn, exists := q.inflightCancel[cancelID]
+				if exists {
+					delete(q.inflightCancel, cancelID)
+				}
+				q.inflightMu.Unlock()
+				if exists {
+					q.logger.Debug("Cancelling in-flight request: %s", cancelID)
+					cancelFn()
+				}
+			}
+			return nil
+		}
+		return types.NewControlProtocolError("invalid control_cancel_request message type")
+	}
+
 	// Regular message - observe for events, then send to consumer
 	if q.eventTracker != nil {
 		q.eventTracker.Observe(msg)
@@ -344,24 +388,40 @@ func (q *Query) handleControlRequest(msg *types.SystemMessage) {
 	subtype, _ := requestData["subtype"].(string)
 	q.logger.Debug("handleControlRequest: subtype=%s", subtype)
 
+	// Register cancellable context for this request
+	reqCtx, reqCancel := context.WithCancel(q.ctx)
+	q.inflightMu.Lock()
+	q.inflightCancel[requestID] = reqCancel
+	q.inflightMu.Unlock()
+	defer func() {
+		q.inflightMu.Lock()
+		delete(q.inflightCancel, requestID)
+		q.inflightMu.Unlock()
+		reqCancel()
+	}()
+
 	var response map[string]interface{}
 	var err error
 
 	switch subtype {
 	case "can_use_tool":
-		response, err = q.handlePermissionRequest(requestData)
+		response, err = q.handlePermissionRequest(reqCtx, requestData)
 	case "hook_callback":
 		response, err = q.handleHookCallback(requestData)
 	case "mcp_message":
 		response, err = q.handleMCPMessage(requestData)
 	case "interrupt":
-		// Handle interrupt - just acknowledge for now
 		response = make(map[string]interface{})
 	case "set_permission_mode":
-		// Handle permission mode change - acknowledge for now
 		response = make(map[string]interface{})
 	default:
 		err = types.NewControlProtocolError("unsupported control request subtype: " + subtype)
+	}
+
+	// If cancelled, don't send a response (CLI already abandoned the request)
+	if reqCtx.Err() != nil {
+		q.logger.Debug("handleControlRequest: request %s was cancelled, skipping response", requestID)
+		return
 	}
 
 	if err != nil {
@@ -373,15 +433,8 @@ func (q *Query) handleControlRequest(msg *types.SystemMessage) {
 }
 
 // handlePermissionRequest handles a permission request for tool use.
-func (q *Query) handlePermissionRequest(requestData map[string]interface{}) (map[string]interface{}, error) {
+func (q *Query) handlePermissionRequest(reqCtx context.Context, requestData map[string]interface{}) (map[string]interface{}, error) {
 	q.logger.Debug("handlePermissionRequest: entered, requestData=%+v", requestData)
-
-	if q.canUseTool == nil {
-		q.logger.Error("handlePermissionRequest: canUseTool callback is nil!")
-		return nil, types.NewControlProtocolError("canUseTool callback is not provided")
-	}
-
-	q.logger.Debug("handlePermissionRequest: canUseTool callback is set")
 
 	toolName, _ := requestData["tool_name"].(string)
 	input, _ := requestData["input"].(map[string]interface{})
@@ -394,12 +447,24 @@ func (q *Query) handlePermissionRequest(requestData map[string]interface{}) (map
 		return nil, types.NewControlProtocolError("missing tool_name or input in permission request")
 	}
 
-	// Build permission context
+	// Check tool handlers first (takes priority over canUseTool)
+	if q.toolHandlers != nil {
+		if handler, registered := q.toolHandlers[toolName]; registered {
+			return q.executeToolHandler(toolName, input, requestData, handler)
+		}
+	}
+
+	if q.canUseTool == nil {
+		q.logger.Error("handlePermissionRequest: canUseTool callback is nil!")
+		return nil, types.NewControlProtocolError("canUseTool callback is not provided")
+	}
+
+	q.logger.Debug("handlePermissionRequest: canUseTool callback is set")
+
+	// Build permission context with all available fields
 	permissionUpdates := make([]types.PermissionUpdate, 0)
 	for _, s := range suggestions {
 		if suggestionMap, ok := s.(map[string]interface{}); ok {
-			// Parse suggestion into PermissionUpdate
-			// This is a simplified version - production code should handle all fields
 			suggestionJSON, _ := json.Marshal(suggestionMap)
 			var update types.PermissionUpdate
 			if err := json.Unmarshal(suggestionJSON, &update); err == nil {
@@ -408,13 +473,32 @@ func (q *Query) handlePermissionRequest(requestData map[string]interface{}) (map
 		}
 	}
 
-	ctx := types.ToolPermissionContext{
-		Suggestions: permissionUpdates,
+	toolUseID, _ := requestData["tool_use_id"].(string)
+	agentID, _ := requestData["agent_id"].(string)
+	decisionReason, _ := requestData["decision_reason"].(string)
+	title, _ := requestData["title"].(string)
+	displayName, _ := requestData["display_name"].(string)
+	description, _ := requestData["description"].(string)
+
+	blockedPath := ""
+	if bp, ok := requestData["blocked_path"].(string); ok {
+		blockedPath = bp
 	}
 
-	// Call permission callback
+	permCtx := types.ToolPermissionContext{
+		Suggestions:    permissionUpdates,
+		ToolUseID:      toolUseID,
+		AgentID:        agentID,
+		BlockedPath:    blockedPath,
+		DecisionReason: decisionReason,
+		Title:          title,
+		DisplayName:    displayName,
+		Description:    description,
+	}
+
+	// Call permission callback with cancellable context
 	q.logger.Debug("handlePermissionRequest: CALLING canUseTool callback for tool=%s", toolName)
-	result, err := q.canUseTool(q.ctx, toolName, input, ctx)
+	result, err := q.canUseTool(reqCtx, toolName, input, permCtx)
 	q.logger.Debug("handlePermissionRequest: canUseTool callback returned: result=%+v, err=%v", result, err)
 	if err != nil {
 		q.logger.Error("handlePermissionRequest: canUseTool callback returned error: %v", err)
@@ -755,4 +839,135 @@ func matchesToolName(toolName string, pattern *string) bool {
 	}
 
 	return regex.MatchString(toolName)
+}
+
+// executeToolHandler handles a tool execution request via registered ToolHandler.
+// If handler is non-nil, it calls the handler directly (callback mode).
+// If handler is nil, it emits a ToolExecutionRequest and waits for SubmitToolResult (event-stream mode).
+func (q *Query) executeToolHandler(toolName string, input map[string]interface{}, requestData map[string]interface{}, handler types.ToolHandlerFunc) (map[string]interface{}, error) {
+	toolUseID, _ := requestData["tool_use_id"].(string)
+	if toolUseID == "" {
+		toolUseID = fmt.Sprintf("tool_%d", atomic.AddInt64(&q.nextRequestID, 1))
+	}
+
+	q.logger.Debug("executeToolHandler: toolName=%s, toolUseID=%s, callbackMode=%v", toolName, toolUseID, handler != nil)
+
+	var result *types.ToolResult
+	var err error
+
+	if handler != nil {
+		// Callback mode: call handler directly
+		req := types.ToolHandlerRequest{
+			ToolUseID: toolUseID,
+			ToolName:  toolName,
+			Input:     input,
+		}
+		result, err = handler(q.ctx, req)
+		if err != nil {
+			q.logger.Error("executeToolHandler: handler error: %v", err)
+			return q.buildDenyResponse(fmt.Sprintf("tool handler error: %v", err)), nil
+		}
+	} else {
+		// Event-stream mode: emit request and wait for SubmitToolResult
+		resultChan := make(chan *types.ToolResult, 1)
+		q.pendingMu.Lock()
+		q.pendingToolResults[toolUseID] = resultChan
+		q.pendingMu.Unlock()
+
+		defer func() {
+			q.pendingMu.Lock()
+			delete(q.pendingToolResults, toolUseID)
+			q.pendingMu.Unlock()
+		}()
+
+		// Emit ToolExecutionRequest to message channel
+		execReq := &types.ToolExecutionRequest{
+			Type:      "tool_execution_request",
+			ToolUseID: toolUseID,
+			ToolName:  toolName,
+			Input:     input,
+		}
+
+		select {
+		case q.messagesChan <- execReq:
+		case <-q.ctx.Done():
+			return nil, q.ctx.Err()
+		}
+
+		// Wait for result with timeout
+		timeout := time.NewTimer(q.toolHandlerTimeout)
+		defer timeout.Stop()
+
+		select {
+		case result = <-resultChan:
+			// Got result from SubmitToolResult
+		case <-timeout.C:
+			q.logger.Warning("executeToolHandler: timeout waiting for tool result, toolUseID=%s", toolUseID)
+			return q.buildDenyResponse("tool execution timed out: no result submitted within deadline"), nil
+		case <-q.ctx.Done():
+			return nil, q.ctx.Err()
+		}
+	}
+
+	if result == nil {
+		return q.buildDenyResponse("tool handler returned nil result"), nil
+	}
+
+	return q.buildExecuteResponse(result), nil
+}
+
+// SubmitToolResult provides a tool execution result for event-stream mode.
+// This unblocks the pending handlePermissionRequest waiting for this toolUseID.
+func (q *Query) SubmitToolResult(toolUseID string, result *types.ToolResult) error {
+	q.pendingMu.Lock()
+	ch, exists := q.pendingToolResults[toolUseID]
+	q.pendingMu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("no pending tool execution request for toolUseID: %s", toolUseID)
+	}
+
+	select {
+	case ch <- result:
+		return nil
+	default:
+		return fmt.Errorf("result already submitted for toolUseID: %s", toolUseID)
+	}
+}
+
+// buildExecuteResponse constructs a permission response with behavior "result".
+func (q *Query) buildExecuteResponse(result *types.ToolResult) map[string]interface{} {
+	content := make([]interface{}, 0, len(result.Content))
+	for _, block := range result.Content {
+		switch b := block.(type) {
+		case types.TextBlock:
+			content = append(content, map[string]interface{}{
+				"type": "text",
+				"text": b.Text,
+			})
+		case *types.TextBlock:
+			content = append(content, map[string]interface{}{
+				"type": "text",
+				"text": b.Text,
+			})
+		default:
+			content = append(content, block)
+		}
+	}
+
+	return map[string]interface{}{
+		"behavior": "result",
+		"result": map[string]interface{}{
+			"content":  content,
+			"is_error": result.IsError,
+		},
+	}
+}
+
+// buildDenyResponse constructs a deny permission response with a message.
+func (q *Query) buildDenyResponse(message string) map[string]interface{} {
+	return map[string]interface{}{
+		"behavior": "deny",
+		"message":  message,
+	}
 }

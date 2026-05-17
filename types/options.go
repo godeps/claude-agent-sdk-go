@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"time"
 )
 
 // SettingSource represents where settings are loaded from.
@@ -197,6 +198,12 @@ type ClaudeAgentOptions struct {
 	CanUseTool CanUseToolFunc              `json:"-"`
 	Hooks      map[HookEvent][]HookMatcher `json:"-"`
 	Stderr     StderrCallbackFunc          `json:"-"`
+
+	// Tool execution handlers - intercept tool execution and provide results directly.
+	// Keys are tool names (e.g., "AskUserQuestion"). A non-nil handler uses callback mode;
+	// a nil handler uses event-stream mode (ToolExecutionRequest emitted via ReceiveResponse).
+	ToolHandlers       map[string]ToolHandlerFunc `json:"-"`
+	ToolHandlerTimeout *time.Duration             `json:"-"`
 
 	// Event callbacks
 	OnToolEvent ToolEventHandler `json:"-"`
@@ -485,6 +492,28 @@ func (o *ClaudeAgentOptions) WithHook(event HookEvent, matcher HookMatcher) *Cla
 		o.Hooks = make(map[HookEvent][]HookMatcher)
 	}
 	o.Hooks[event] = append(o.Hooks[event], matcher)
+	return o
+}
+
+// WithToolHandler registers a tool execution handler for the given tool name.
+// When Claude calls this tool, the SDK invokes the handler instead of letting the CLI execute it.
+//
+// Pass a non-nil handler for callback mode (handler is called directly).
+// Pass nil for event-stream mode (ToolExecutionRequest emitted via ReceiveResponse,
+// caller must respond via Client.SubmitToolResult).
+func (o *ClaudeAgentOptions) WithToolHandler(toolName string, handler ToolHandlerFunc) *ClaudeAgentOptions {
+	if o.ToolHandlers == nil {
+		o.ToolHandlers = make(map[string]ToolHandlerFunc)
+	}
+	o.ToolHandlers[toolName] = handler
+	return o
+}
+
+// WithToolHandlerTimeout sets the timeout for event-stream mode tool handlers.
+// If the caller does not submit a result within this duration, the SDK returns
+// a deny response with a timeout error message. Default is 5 minutes.
+func (o *ClaudeAgentOptions) WithToolHandlerTimeout(d time.Duration) *ClaudeAgentOptions {
+	o.ToolHandlerTimeout = &d
 	return o
 }
 

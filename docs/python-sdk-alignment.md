@@ -28,7 +28,11 @@ This document details how the Go SDK aligns with the official Python SDK, provid
 | Base tools config | ✅ | ✅ | ✅ Complete | `WithTools()` |
 | Permission modes | ✅ | ✅ | ✅ Complete | All 4 modes supported |
 | Permission callbacks | ✅ | ✅ | ✅ Complete | `WithCanUseTool()` |
+| Permission context (all fields) | ✅ | ✅ | ✅ Complete | ToolUseID, AgentID, BlockedPath, DecisionReason, Title, DisplayName, Description |
+| Permission cancel support | ✅ | ✅ | ✅ Complete | `control_cancel_request` handling |
 | Permission updates | ✅ | ✅ | ✅ Complete | Full support |
+| Tool handler (callback) | ✅ | ✅ | ✅ Complete | `WithToolHandler()` |
+| Tool handler (event-stream) | ✅ | ✅ | ✅ Complete | `ToolExecutionRequest` + `SubmitToolResult()` |
 | **Hooks** |
 | PreToolUse | ✅ | ✅ | ✅ Complete | Before tool execution |
 | PostToolUse | ✅ | ✅ | ✅ Complete | After tool execution |
@@ -104,6 +108,7 @@ This document details how the Go SDK aligns with the official Python SDK, provid
 | **Control Protocol** |
 | Initialize | ✅ | ✅ | ✅ Complete | Automatic |
 | Interrupt | ✅ | ✅ | ✅ Complete | `Interrupt()` |
+| Cancel in-flight requests | ✅ | ✅ | ✅ Complete | `control_cancel_request` |
 | Permission requests | ✅ | ✅ | ✅ Complete | Bidirectional |
 | Hook callbacks | ✅ | ✅ | ✅ Complete | Bidirectional |
 | MCP message routing | ✅ | ✅ | ✅ Complete | Full support |
@@ -324,6 +329,14 @@ The Go SDK includes several enhancements beyond the Python SDK:
 4. **Better Concurrency**: Native goroutines and channels
 5. **Lower Resource Usage**: Smaller memory footprint
 6. **Faster Startup**: Native compilation
+7. **Middleware System**: Composable query pipeline with built-in AuditLog, Timeout, RateLimit, CostGuard
+8. **Typed Queries**: `QueryTyped[T]()` with auto-generated JSON schema from Go struct tags
+9. **Agent Pool**: `FanOut()` and `MapReduce()` for concurrent multi-agent workflows
+10. **Auth Providers**: Pluggable `AuthProvider` interface with APIKey, BearerToken, HMAC implementations
+11. **Retry with Backoff**: `QueryWithRetry()` with configurable `RetryConfig`
+12. **Event Callbacks**: `OnToolEvent` and `OnProgress` real-time event handlers
+13. **Session Utilities**: `ListSessions()` and `ResumeSession()` helpers
+14. **Structured Logging**: `slog.Logger` integration via `WithLogger()`
 
 ## 🎓 Best Practices
 

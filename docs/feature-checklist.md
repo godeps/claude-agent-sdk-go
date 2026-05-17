@@ -90,10 +90,26 @@ This document tracks the implementation status of all features from the Python S
 - [x] `UpdatedInput` - Modify tool input
 - [x] `UpdatedPermissions` - Update permission rules
 
-### Permission Context
+### Permission Context (Full Python SDK Parity)
 - [x] `ToolPermissionContext` - Permission context
 - [x] `Suggestions` - Permission suggestions
 - [x] `BlockedPath` - Blocked path info
+- [x] `ToolUseID` - Unique tool invocation ID
+- [x] `AgentID` - Requesting agent ID
+- [x] `DecisionReason` - Why CLI is asking for permission
+- [x] `Title` - Human-readable tool title
+- [x] `DisplayName` - Display name shown to users
+- [x] `Description` - Tool description
+
+### Tool Handler
+- [x] `ToolHandlerFunc` - Tool execution handler type
+- [x] `ToolHandlerRequest` - Handler request with ToolUseID, ToolName, Input
+- [x] `ToolExecutionRequest` - Event-stream mode message type
+- [x] `PermissionResultExecute` - Pre-computed tool result
+- [x] `WithToolHandler()` - Register callback or event-stream handler
+- [x] `WithToolHandlerTimeout()` - Event-stream timeout configuration
+- [x] `Client.SubmitToolResult()` - Submit result for event-stream requests
+- [x] `AsToolExecutionRequest()` - Type helper
 
 ## ✅ Hook System (100%)
 
@@ -305,11 +321,12 @@ This document tracks the implementation status of all features from the Python S
 
 ### Control Requests
 - [x] `SDKControlInterruptRequest` - Interrupt
-- [x] `SDKControlPermissionRequest` - Permission
+- [x] `SDKControlPermissionRequest` - Permission (expanded with all context fields)
 - [x] `SDKControlInitializeRequest` - Initialize
 - [x] `SDKControlSetPermissionModeRequest` - Set mode
 - [x] `SDKHookCallbackRequest` - Hook callback
 - [x] `SDKControlMcpMessageRequest` - MCP message
+- [x] `control_cancel_request` - Cancel in-flight requests
 
 ### Control Responses
 - [x] `ControlResponse` - Success response
@@ -357,7 +374,7 @@ This document tracks the implementation status of all features from the Python S
 |----------|------------|
 | Core API | 100% (7/7) |
 | Configuration | 100% (35/35) |
-| Permissions | 100% (12/12) |
+| Permissions | 100% (20/20) |
 | Hooks | 100% (36/36) |
 | MCP Servers | 100% (8/8) |
 | Custom Tools | 100% (30/30) |
@@ -365,9 +382,18 @@ This document tracks the implementation status of all features from the Python S
 | Errors | 100% (24/24) |
 | Agents | 100% (7/7) |
 | Plugins | 100% (6/6) |
-| Control Protocol | 100% (12/12) |
+| Control Protocol | 100% (13/13) |
 | Advanced | 100% (12/12) |
-| **TOTAL** | **100% (204/204)** |
+| Tool Handler | 100% (8/8) |
+| Middleware | 100% (9/9) |
+| Typed Queries | 100% (3/3) |
+| Agent Pool | 100% (6/6) |
+| Retry | 100% (3/3) |
+| Auth Providers | 100% (5/5) |
+| Event Callbacks | 100% (6/6) |
+| Session Utilities | 100% (3/3) |
+| Structured Logging | 100% (1/1) |
+| **TOTAL** | **100% (257/257)** |
 
 ## 🎯 Feature Parity Status
 
@@ -383,6 +409,66 @@ All features from the Python SDK have been implemented and tested. The Go SDK pr
 - Enhanced tool creation APIs
 - Type safety throughout
 
+## ✅ Middleware System (100%)
+
+- [x] `SDK` type - Top-level entry point with middleware
+- [x] `NewSDK()` - Create SDK with middleware chain
+- [x] `WithMiddleware()` - Append middleware
+- [x] `QueryFunc` type - Query execution signature
+- [x] `Middleware` type - Query wrapper function
+- [x] `AuditLogMiddleware` - Structured logging of every query
+- [x] `TimeoutMiddleware` - Per-query timeout enforcement
+- [x] `RateLimitMiddleware` - Concurrent query limiting
+- [x] `CostGuardMiddleware` - Cumulative cost tracking
+
+## ✅ Typed Queries (100%)
+
+- [x] `QueryTyped[T]()` - Generic typed query with JSON schema
+- [x] `ResultMeta` - Metadata from query result (cost, turns, duration)
+- [x] Auto-generated JSON schema from struct tags
+
+## ✅ Agent Pool (100%)
+
+- [x] `AgentPool` - Concurrent query pool
+- [x] `NewAgentPool()` - Create pool with concurrency limit
+- [x] `FanOut()` - Send multiple prompts concurrently
+- [x] `MapReduce()` - Split work, then reduce results
+- [x] `AgentResult` - Result type with text and error
+- [x] `MapFunc` / `ReduceFunc` - Transform functions
+
+## ✅ Retry (100%)
+
+- [x] `QueryWithRetry()` - Retry wrapper with backoff
+- [x] `RetryConfig` - Max retries, initial/max delay, backoff factor
+- [x] `WithRetry()` - Configuration option
+
+## ✅ Auth Providers (100%)
+
+- [x] `AuthProvider` interface - Pluggable authentication
+- [x] `APIKeyAuth` - Static API key
+- [x] `BearerTokenAuth` - Bearer token (DashScope, Azure, etc.)
+- [x] `HMACAuth` - HMAC-signed credentials
+- [x] `WithAuthProvider()` - Configuration option
+
+## ✅ Event Callbacks (100%)
+
+- [x] `ToolEvent` - Tool use event with phase, name, duration
+- [x] `ToolEventHandler` - Callback type for tool events
+- [x] `Progress` - Cost/turn/duration tracking
+- [x] `ProgressHandler` - Callback type for progress updates
+- [x] `WithOnToolEvent()` - Configuration option
+- [x] `WithOnProgress()` - Configuration option
+
+## ✅ Session Utilities (100%)
+
+- [x] `SessionInfo` - Session metadata (ID, summary, model)
+- [x] `ListSessions()` - Query CLI for available sessions
+- [x] `ResumeSession()` - Create options pre-configured for resume
+
+## ✅ Structured Logging (100%)
+
+- [x] `WithLogger()` - Set custom `slog.Logger`
+
 ## 🚀 Go SDK Enhancements
 
 Beyond feature parity, the Go SDK includes several enhancements:
@@ -393,6 +479,13 @@ Beyond feature parity, the Go SDK includes several enhancements:
 4. **Standalone Binaries** - No runtime dependencies
 5. **Superior Concurrency** - Native goroutines and channels
 6. **Tool Manager** - Built-in tool registry system
+7. **Middleware System** - Composable query pipeline with built-in middleware
+8. **Typed Queries** - `QueryTyped[T]()` with auto-generated JSON schema
+9. **Agent Pool** - `FanOut()` and `MapReduce()` patterns
+10. **Auth Providers** - Pluggable APIKey, BearerToken, HMAC
+11. **Retry with Backoff** - Configurable retry logic
+12. **Event Callbacks** - Real-time tool and progress events
+13. **Session Utilities** - List and resume past sessions
 
 ## 📝 Notes
 

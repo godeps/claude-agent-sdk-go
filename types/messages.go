@@ -521,7 +521,7 @@ func UnmarshalMessage(data []byte) (Message, error) {
 			return nil, NewCLIJSONDecodeErrorWithCause("failed to unmarshal assistant message", string(data), err)
 		}
 		return &msg, nil
-	case "system", "control_request", "control_response":
+	case "system", "control_request", "control_response", "control_cancel_request":
 		// system, control_request, and control_response are all SystemMessage types
 		var msg SystemMessage
 		if err := json.Unmarshal(data, &msg); err != nil {

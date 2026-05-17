@@ -170,6 +170,12 @@ func NewClient(ctx context.Context, options *types.ClaudeAgentOptions) (*Client,
 		options.PermissionPromptToolName = &stdio
 	}
 
+	// If ToolHandlers are provided, automatically set PermissionPromptToolName to "stdio"
+	if len(options.ToolHandlers) > 0 && options.PermissionPromptToolName == nil {
+		stdio := "stdio"
+		options.PermissionPromptToolName = &stdio
+	}
+
 	// Apply auth provider if set
 	if options.AuthProvider != nil {
 		if err := options.AuthProvider.Apply(options); err != nil {
@@ -646,6 +652,28 @@ func (c *Client) Interrupt(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// SubmitToolResult provides the execution result for a tool in event-stream mode.
+// When ToolExecutionRequest messages are received via ReceiveResponse(), call this method
+// to supply the tool result and unblock the pending request.
+//
+// Parameters:
+//   - ctx: Context for cancellation
+//   - toolUseID: The ToolUseID from the ToolExecutionRequest
+//   - result: The tool execution result
+//
+// Returns an error if no pending request exists for the given toolUseID.
+func (c *Client) SubmitToolResult(ctx context.Context, toolUseID string, result *types.ToolResult) error {
+	c.mu.Lock()
+	if !c.connected || c.query == nil {
+		c.mu.Unlock()
+		return types.NewCLIConnectionError("not connected - call Connect() first")
+	}
+	query := c.query
+	c.mu.Unlock()
+
+	return query.SubmitToolResult(toolUseID, result)
 }
 
 // RewindFiles rewinds tracked files to the state at the specified user message UUID.
