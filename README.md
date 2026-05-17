@@ -5,6 +5,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python SDK Parity](https://img.shields.io/badge/Python%20SDK%20Parity-100%25-brightgreen)](docs/python-sdk-alignment.md)
 
+**English** | [中文](README_CN.md)
+
 A Go SDK for interacting with Claude Code CLI, providing a robust interface for building AI-powered applications using Anthropic's Claude models.
 
 ## 🎯 100% Python SDK Feature Parity
