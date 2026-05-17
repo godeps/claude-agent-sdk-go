@@ -170,6 +170,13 @@ func NewClient(ctx context.Context, options *types.ClaudeAgentOptions) (*Client,
 		options.PermissionPromptToolName = &stdio
 	}
 
+	// Apply auth provider if set
+	if options.AuthProvider != nil {
+		if err := options.AuthProvider.Apply(options); err != nil {
+			return nil, fmt.Errorf("auth provider failed: %w", err)
+		}
+	}
+
 	// Find CLI path
 	cliPath := ""
 	if options.CLIPath != nil {
@@ -199,8 +206,15 @@ func NewClient(ctx context.Context, options *types.ClaudeAgentOptions) (*Client,
 	// Create client context
 	clientCtx, cancel := context.WithCancel(ctx)
 
-	// Create logger
-	logger := log.NewLogger(options.Verbose)
+	// Create logger with priority: custom Logger > LogLevel > Verbose
+	var logger *log.Logger
+	if options.Logger != nil {
+		logger = log.NewLoggerFromSlog(options.Logger)
+	} else if options.LogLevel != nil {
+		logger = log.NewLoggerWithLevel(*options.LogLevel)
+	} else {
+		logger = log.NewLogger(options.Verbose)
+	}
 
 	// Determine resume session ID from options
 	resumeID := ""

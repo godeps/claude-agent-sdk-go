@@ -2,6 +2,9 @@ package types
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"net/url"
 )
 
 // SettingSource represents where settings are loaded from.
@@ -66,6 +69,13 @@ type McpSSEServerConfig struct {
 // McpHTTPServerConfig represents an MCP HTTP server configuration.
 type McpHTTPServerConfig struct {
 	Type    string            `json:"type"` // "http"
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// McpStreamableHTTPServerConfig represents an MCP Streamable HTTP server configuration.
+type McpStreamableHTTPServerConfig struct {
+	Type    string            `json:"type"` // "streamable-http"
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
@@ -178,10 +188,33 @@ type ClaudeAgentOptions struct {
 	// Debug and diagnostics
 	Verbose bool `json:"-"` // Enable verbose debug logging
 
+	// CLI behavior flags
+	BareMode         bool                   `json:"bare_mode,omitempty"`
+	NoMarkdown       bool                   `json:"no_markdown,omitempty"`
+	SettingsOverride map[string]interface{} `json:"settings_override,omitempty"`
+
 	// Callbacks (not marshaled to JSON)
 	CanUseTool CanUseToolFunc              `json:"-"`
 	Hooks      map[HookEvent][]HookMatcher `json:"-"`
 	Stderr     StderrCallbackFunc          `json:"-"`
+
+	// Event callbacks
+	OnToolEvent ToolEventHandler `json:"-"`
+	OnProgress  ProgressHandler  `json:"-"`
+
+	// Structured logging
+	Logger   *slog.Logger `json:"-"`
+	LogLevel *slog.Level  `json:"-"`
+
+	// Retry configuration
+	RetryConfig *RetryConfig `json:"-"`
+
+	// Cost guard
+	CostLimitUSD      *float64           `json:"-"`
+	OnCostLimitExceed func(spent float64) `json:"-"`
+
+	// Auth provider
+	AuthProvider AuthProvider `json:"-"`
 }
 
 // NewClaudeAgentOptions creates a new ClaudeAgentOptions with sensible defaults.
@@ -512,5 +545,169 @@ func (o *ClaudeAgentOptions) WithLocalPlugin(path string) *ClaudeAgentOptions {
 // WithEnableFileCheckpointing toggles file checkpointing support.
 func (o *ClaudeAgentOptions) WithEnableFileCheckpointing(enabled bool) *ClaudeAgentOptions {
 	o.EnableFileCheckpointing = enabled
+	return o
+}
+
+// --- P0: MCP Structured Config ---
+
+// ensureMcpServersMap initializes McpServers as a map if nil or not already a map.
+func (o *ClaudeAgentOptions) ensureMcpServersMap() {
+	if o.McpServers == nil {
+		o.McpServers = make(map[string]interface{})
+		return
+	}
+	if _, ok := o.McpServers.(map[string]interface{}); !ok {
+		o.McpServers = make(map[string]interface{})
+	}
+}
+
+// WithMcpStdioServer adds a named stdio MCP server with validation.
+func (o *ClaudeAgentOptions) WithMcpStdioServer(name string, config McpStdioServerConfig) *ClaudeAgentOptions {
+	if name == "" {
+		panic("claude-agent-sdk: WithMcpStdioServer: name must not be empty")
+	}
+	if config.Command == "" {
+		panic("claude-agent-sdk: WithMcpStdioServer: command must not be empty")
+	}
+	if config.Type == nil {
+		t := "stdio"
+		config.Type = &t
+	}
+	o.ensureMcpServersMap()
+	o.McpServers.(map[string]interface{})[name] = config
+	return o
+}
+
+// WithMcpHTTPServer adds a named HTTP MCP server with URL validation.
+func (o *ClaudeAgentOptions) WithMcpHTTPServer(name string, config McpHTTPServerConfig) *ClaudeAgentOptions {
+	if name == "" {
+		panic("claude-agent-sdk: WithMcpHTTPServer: name must not be empty")
+	}
+	if config.URL == "" {
+		panic("claude-agent-sdk: WithMcpHTTPServer: URL must not be empty")
+	}
+	if _, err := url.Parse(config.URL); err != nil {
+		panic(fmt.Sprintf("claude-agent-sdk: WithMcpHTTPServer: invalid URL %q: %v", config.URL, err))
+	}
+	if config.Type == "" {
+		config.Type = "http"
+	}
+	o.ensureMcpServersMap()
+	o.McpServers.(map[string]interface{})[name] = config
+	return o
+}
+
+// WithMcpStreamableHTTPServer adds a named Streamable HTTP MCP server.
+func (o *ClaudeAgentOptions) WithMcpStreamableHTTPServer(name string, config McpStreamableHTTPServerConfig) *ClaudeAgentOptions {
+	if name == "" {
+		panic("claude-agent-sdk: WithMcpStreamableHTTPServer: name must not be empty")
+	}
+	if config.URL == "" {
+		panic("claude-agent-sdk: WithMcpStreamableHTTPServer: URL must not be empty")
+	}
+	if config.Type == "" {
+		config.Type = "streamable-http"
+	}
+	o.ensureMcpServersMap()
+	o.McpServers.(map[string]interface{})[name] = config
+	return o
+}
+
+// WithMcpSSEServer adds a named SSE MCP server with URL validation.
+func (o *ClaudeAgentOptions) WithMcpSSEServer(name string, config McpSSEServerConfig) *ClaudeAgentOptions {
+	if name == "" {
+		panic("claude-agent-sdk: WithMcpSSEServer: name must not be empty")
+	}
+	if config.URL == "" {
+		panic("claude-agent-sdk: WithMcpSSEServer: URL must not be empty")
+	}
+	if config.Type == "" {
+		config.Type = "sse"
+	}
+	o.ensureMcpServersMap()
+	o.McpServers.(map[string]interface{})[name] = config
+	return o
+}
+
+// WithMcpSdkServer adds a named SDK (in-process) MCP server.
+func (o *ClaudeAgentOptions) WithMcpSdkServer(name string, server *ToolServerConfig) *ClaudeAgentOptions {
+	if name == "" {
+		panic("claude-agent-sdk: WithMcpSdkServer: name must not be empty")
+	}
+	o.ensureMcpServersMap()
+	o.McpServers.(map[string]interface{})[name] = server
+	return o
+}
+
+// --- P0: CLI Flags ---
+
+// WithBareMode enables bare mode (minimal output, no status messages).
+func (o *ClaudeAgentOptions) WithBareMode() *ClaudeAgentOptions {
+	o.BareMode = true
+	return o
+}
+
+// WithNoMarkdown disables markdown rendering in Claude's output.
+func (o *ClaudeAgentOptions) WithNoMarkdown() *ClaudeAgentOptions {
+	o.NoMarkdown = true
+	return o
+}
+
+// WithSettingsOverride provides runtime settings overrides as a JSON-compatible map.
+func (o *ClaudeAgentOptions) WithSettingsOverride(overrides map[string]interface{}) *ClaudeAgentOptions {
+	o.SettingsOverride = overrides
+	return o
+}
+
+// --- P1: Event Callbacks ---
+
+// WithOnToolEvent sets a callback for tool use events.
+func (o *ClaudeAgentOptions) WithOnToolEvent(handler ToolEventHandler) *ClaudeAgentOptions {
+	o.OnToolEvent = handler
+	return o
+}
+
+// WithOnProgress sets a callback for progress updates.
+func (o *ClaudeAgentOptions) WithOnProgress(handler ProgressHandler) *ClaudeAgentOptions {
+	o.OnProgress = handler
+	return o
+}
+
+// --- P1: Structured Logging ---
+
+// WithLogger sets a custom slog.Logger for structured logging. Overrides Verbose.
+func (o *ClaudeAgentOptions) WithLogger(logger *slog.Logger) *ClaudeAgentOptions {
+	o.Logger = logger
+	return o
+}
+
+// WithLogLevel sets the log level for the default stderr logger.
+func (o *ClaudeAgentOptions) WithLogLevel(level slog.Level) *ClaudeAgentOptions {
+	o.LogLevel = &level
+	return o
+}
+
+// --- P2: Retry ---
+
+// WithRetry enables automatic retry with the given configuration.
+func (o *ClaudeAgentOptions) WithRetry(config *RetryConfig) *ClaudeAgentOptions {
+	o.RetryConfig = config
+	return o
+}
+
+// --- P2: Cost Guard ---
+
+// WithCostLimit sets a client-side cost limit in USD.
+func (o *ClaudeAgentOptions) WithCostLimit(maxUSD float64, callback func(spent float64)) *ClaudeAgentOptions {
+	o.CostLimitUSD = &maxUSD
+	o.OnCostLimitExceed = callback
+	return o
+}
+
+// --- P3: Auth ---
+
+// WithAuthProvider sets the authentication provider.
+func (o *ClaudeAgentOptions) WithAuthProvider(provider AuthProvider) *ClaudeAgentOptions {
+	o.AuthProvider = provider
 	return o
 }

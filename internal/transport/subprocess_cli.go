@@ -512,6 +512,28 @@ func (t *SubprocessCLITransport) buildCommandArgs() []string {
 		t.logger.Debug("Including partial messages")
 	}
 
+	// Bare mode
+	if opts != nil && opts.BareMode {
+		args = append(args, "--bare")
+		t.logger.Debug("Enabling bare mode")
+	}
+
+	// No markdown
+	if opts != nil && opts.NoMarkdown {
+		args = append(args, "--no-markdown")
+		t.logger.Debug("Disabling markdown output")
+	}
+
+	// Settings override
+	if opts != nil && opts.SettingsOverride != nil && len(opts.SettingsOverride) > 0 {
+		if data, err := json.Marshal(opts.SettingsOverride); err == nil {
+			args = append(args, "--settings-override", string(data))
+			t.logger.Debug("Setting settings override")
+		} else {
+			t.logger.Warning("Failed to marshal settings override: %v", err)
+		}
+	}
+
 	// Agent definitions
 	if opts != nil && len(opts.Agents) > 0 {
 		agentsPayload := make(map[string]map[string]interface{}, len(opts.Agents))
@@ -625,6 +647,17 @@ func (t *SubprocessCLITransport) generateMcpConfigFile() string {
 				"url":     s.URL,
 				"headers": s.Headers,
 			}
+			externalServers = true
+
+		case types.McpStreamableHTTPServerConfig:
+			serverConfig := map[string]interface{}{
+				"type": "streamable-http",
+				"url":  s.URL,
+			}
+			if len(s.Headers) > 0 {
+				serverConfig["headers"] = s.Headers
+			}
+			config["mcpServers"].(map[string]interface{})[name] = serverConfig
 			externalServers = true
 		}
 	}

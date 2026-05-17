@@ -44,6 +44,9 @@ type Query struct {
 	initialized      bool
 	initializeResult map[string]interface{}
 	isStreamingMode  bool
+
+	// Event tracking
+	eventTracker *EventTracker
 }
 
 // responseResult wraps the response or error from a control request.
@@ -80,6 +83,8 @@ func NewQuery(ctx context.Context, transport transport.Transport, opts *types.Cl
 		q.canUseTool = opts.CanUseTool
 		q.hooks = opts.Hooks
 	}
+
+	q.eventTracker = NewEventTracker(opts, cancel)
 
 	return q
 }
@@ -249,7 +254,10 @@ func (q *Query) routeMessage(msg types.Message) error {
 		return types.NewControlProtocolError("invalid control_request message type")
 	}
 
-	// Regular message - send to consumer
+	// Regular message - observe for events, then send to consumer
+	if q.eventTracker != nil {
+		q.eventTracker.Observe(msg)
+	}
 	select {
 	case q.messagesChan <- msg:
 		return nil

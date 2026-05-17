@@ -74,6 +74,13 @@ func Query(ctx context.Context, prompt string, options *types.ClaudeAgentOptions
 		return nil, fmt.Errorf("prompt cannot be empty")
 	}
 
+	// Apply auth provider if set
+	if options.AuthProvider != nil {
+		if err := options.AuthProvider.Apply(options); err != nil {
+			return nil, fmt.Errorf("auth provider failed: %w", err)
+		}
+	}
+
 	// Find Claude CLI path
 	cliPath := ""
 	if options.CLIPath != nil {
@@ -100,9 +107,15 @@ func Query(ctx context.Context, prompt string, options *types.ClaudeAgentOptions
 		}
 	}
 
-	// Create logger with verbosity from options
-	verbose := options != nil && options.Verbose
-	logger := log.NewLogger(verbose)
+	// Create logger with priority: custom Logger > LogLevel > Verbose
+	var logger *log.Logger
+	if options.Logger != nil {
+		logger = log.NewLoggerFromSlog(options.Logger)
+	} else if options.LogLevel != nil {
+		logger = log.NewLoggerWithLevel(*options.LogLevel)
+	} else {
+		logger = log.NewLogger(options.Verbose)
+	}
 
 	// Determine resume session ID from options
 	resumeID := ""

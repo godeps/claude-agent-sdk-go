@@ -2,42 +2,74 @@ package log
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 )
 
-// Logger provides simple logging for the SDK.
-// It writes to stderr with an [SDK] prefix to distinguish from CLI output.
+// Logger wraps slog.Logger for SDK internal use.
 type Logger struct {
+	slog    *slog.Logger
 	verbose bool
 }
 
-// NewLogger creates a new logger instance.
+// NewLogger creates a logger from the Verbose flag (backward compat).
 func NewLogger(verbose bool) *Logger {
+	level := slog.LevelWarn
+	if verbose {
+		level = slog.LevelDebug
+	}
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})
 	return &Logger{
+		slog:    slog.New(handler).With("component", "claude-sdk"),
 		verbose: verbose,
 	}
 }
 
-// Debug logs a debug message (only when verbose mode is enabled).
+// NewLoggerFromSlog wraps a caller-provided slog.Logger.
+func NewLoggerFromSlog(logger *slog.Logger) *Logger {
+	if logger == nil {
+		return NewLogger(false)
+	}
+	return &Logger{
+		slog:    logger.With("component", "claude-sdk"),
+		verbose: true,
+	}
+}
+
+// NewLoggerWithLevel creates a logger with a specific slog level.
+func NewLoggerWithLevel(level slog.Level) *Logger {
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})
+	return &Logger{
+		slog:    slog.New(handler).With("component", "claude-sdk"),
+		verbose: level <= slog.LevelDebug,
+	}
+}
+
+// Debug logs at DEBUG level.
 func (l *Logger) Debug(format string, args ...interface{}) {
-	if l.verbose {
-		fmt.Fprintf(os.Stderr, "[SDK DEBUG] "+format+"\n", args...)
-	}
+	l.slog.Debug(fmt.Sprintf(format, args...))
 }
 
-// Info logs an informational message (only when verbose mode is enabled).
+// Info logs at INFO level.
 func (l *Logger) Info(format string, args ...interface{}) {
-	if l.verbose {
-		fmt.Fprintf(os.Stderr, "[SDK INFO] "+format+"\n", args...)
-	}
+	l.slog.Info(fmt.Sprintf(format, args...))
 }
 
-// Warning logs a warning message (always displayed).
+// Warning logs at WARN level.
 func (l *Logger) Warning(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "[SDK WARNING] "+format+"\n", args...)
+	l.slog.Warn(fmt.Sprintf(format, args...))
 }
 
-// Error logs an error message (always displayed).
+// Error logs at ERROR level.
 func (l *Logger) Error(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "[SDK ERROR] "+format+"\n", args...)
+	l.slog.Error(fmt.Sprintf(format, args...))
+}
+
+// Slog returns the underlying slog.Logger.
+func (l *Logger) Slog() *slog.Logger {
+	return l.slog
 }
