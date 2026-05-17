@@ -440,18 +440,18 @@ func (t *SubprocessCLITransport) buildCommandArgs() []string {
 		case map[string]interface{}:
 			if len(servers) > 0 {
 				if configFile := t.generateMcpConfigFile(); configFile != "" {
-					args = append(args, "--mcp-servers", configFile)
+					args = append(args, "--mcp-config", configFile)
 					t.logger.Debug("Setting MCP servers config: %s", configFile)
 				}
 			}
 		case string:
 			if strings.TrimSpace(servers) != "" {
-				args = append(args, "--mcp-servers", servers)
+				args = append(args, "--mcp-config", servers)
 				t.logger.Debug("Using MCP servers config path: %s", servers)
 			}
 		case *string:
 			if servers != nil && strings.TrimSpace(*servers) != "" {
-				args = append(args, "--mcp-servers", *servers)
+				args = append(args, "--mcp-config", *servers)
 				t.logger.Debug("Using MCP servers config path: %s", *servers)
 			}
 		}
@@ -527,7 +527,7 @@ func (t *SubprocessCLITransport) buildCommandArgs() []string {
 	// Settings override
 	if opts != nil && opts.SettingsOverride != nil && len(opts.SettingsOverride) > 0 {
 		if data, err := json.Marshal(opts.SettingsOverride); err == nil {
-			args = append(args, "--settings-override", string(data))
+			args = append(args, "--settings", string(data))
 			t.logger.Debug("Setting settings override")
 		} else {
 			t.logger.Warning("Failed to marshal settings override: %v", err)

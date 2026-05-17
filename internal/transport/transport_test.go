@@ -1063,18 +1063,18 @@ func TestMCPServersStringPath(t *testing.T) {
 
 	idx := -1
 	for i, arg := range args {
-		if arg == "--mcp-servers" {
+		if arg == "--mcp-config" {
 			idx = i
 			break
 		}
 	}
 
 	if idx == -1 {
-		t.Fatalf("--mcp-servers flag not found in args: %v", args)
+		t.Fatalf("--mcp-config flag not found in args: %v", args)
 	}
 
 	if idx+1 >= len(args) {
-		t.Fatalf("config path missing after --mcp-servers flag: %v", args)
+		t.Fatalf("config path missing after --mcp-config flag: %v", args)
 	}
 
 	if args[idx+1] != configPath {
