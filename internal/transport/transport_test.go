@@ -1081,3 +1081,86 @@ func TestMCPServersStringPath(t *testing.T) {
 		t.Fatalf("expected config path %s, got %s", configPath, args[idx+1])
 	}
 }
+
+// TestBuildCommandArgs_CustomEndpointTriple verifies the three critical configurations
+// for custom endpoint usage are correctly translated to CLI arguments:
+//   1. --allow-dangerously-skip-permissions + --dangerously-skip-permissions
+//   2. --bare
+//   3. --settings (JSON override with env)
+func TestBuildCommandArgs_CustomEndpointTriple(t *testing.T) {
+	opts := types.NewClaudeAgentOptions().
+		WithAllowDangerouslySkipPermissions(true).
+		WithDangerouslySkipPermissions(true).
+		WithBareMode().
+		WithSettingsOverride(map[string]interface{}{
+			"env": map[string]interface{}{
+				"ANTHROPIC_BASE_URL": "https://custom.example.com/v1",
+				"ANTHROPIC_API_KEY":  "sk-test-key",
+			},
+		}).
+		WithModel("claude-sonnet-4-6").
+		WithMaxTurns(3)
+
+	logger := log.NewLogger(false)
+	transport := NewSubprocessCLITransport("/bin/echo", "", nil, logger, "", opts)
+
+	args := transport.buildCommandArgs()
+	argsStr := strings.Join(args, " ")
+	t.Logf("CLI args: %s", argsStr)
+
+	// (1) Permission bypass flags
+	if !contains(args, "--allow-dangerously-skip-permissions") {
+		t.Fatalf("missing --allow-dangerously-skip-permissions in args: %v", args)
+	}
+	if !contains(args, "--dangerously-skip-permissions") {
+		t.Fatalf("missing --dangerously-skip-permissions in args: %v", args)
+	}
+
+	// (2) Bare mode
+	if !contains(args, "--bare") {
+		t.Fatalf("missing --bare in args: %v", args)
+	}
+
+	// (3) Settings override (passed as --settings with JSON)
+	settingsVal, ok := flagValue(args, "--settings")
+	if !ok {
+		t.Fatalf("missing --settings in args: %v", args)
+	}
+	if !strings.Contains(settingsVal, "ANTHROPIC_BASE_URL") {
+		t.Fatalf("--settings value does not contain ANTHROPIC_BASE_URL: %s", settingsVal)
+	}
+	if !strings.Contains(settingsVal, "https://custom.example.com/v1") {
+		t.Fatalf("--settings value does not contain custom URL: %s", settingsVal)
+	}
+	if !strings.Contains(settingsVal, "ANTHROPIC_API_KEY") {
+		t.Fatalf("--settings value does not contain ANTHROPIC_API_KEY: %s", settingsVal)
+	}
+
+	// Verify model and max-turns are also present
+	if val, ok := flagValue(args, "--model"); !ok || val != "claude-sonnet-4-6" {
+		t.Fatalf("expected model claude-sonnet-4-6, got %q (present=%v)", val, ok)
+	}
+	if val, ok := flagValue(args, "--max-turns"); !ok || val != "3" {
+		t.Fatalf("expected max-turns 3, got %q (present=%v)", val, ok)
+	}
+}
+
+// TestBuildCommandArgs_SkipPermissionsRequiresAllow verifies that
+// --dangerously-skip-permissions is NOT emitted when Allow flag is false.
+func TestBuildCommandArgs_SkipPermissionsRequiresAllow(t *testing.T) {
+	opts := types.NewClaudeAgentOptions().
+		WithAllowDangerouslySkipPermissions(false).
+		WithDangerouslySkipPermissions(true)
+
+	logger := log.NewLogger(false)
+	transport := NewSubprocessCLITransport("/bin/echo", "", nil, logger, "", opts)
+
+	args := transport.buildCommandArgs()
+
+	if contains(args, "--dangerously-skip-permissions") {
+		t.Fatalf("--dangerously-skip-permissions should NOT be present when allow is false: %v", args)
+	}
+	if contains(args, "--allow-dangerously-skip-permissions") {
+		t.Fatalf("--allow-dangerously-skip-permissions should NOT be present when set to false: %v", args)
+	}
+}

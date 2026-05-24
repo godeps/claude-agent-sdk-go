@@ -514,22 +514,122 @@ opts := types.NewClaudeAgentOptions().
     WithAuthProvider(types.NewHMACAuth("key-id", "secret-key"))
 ```
 
-### Third-Party API Compatibility
+### Third-Party API Compatibility (Custom Endpoint)
 
-Use the SDK with Claude-compatible APIs (e.g. DashScope, OpenRouter):
+When using the SDK with a custom model endpoint (proxy, self-hosted, or third-party compatible API such as DashScope or OpenRouter), you **must** configure three critical settings for the CLI subprocess to work correctly:
+
+| Configuration | CLI Flag | Problem It Solves |
+|--------------|----------|------------------|
+| `WithAllowDangerouslySkipPermissions(true)` + `WithDangerouslySkipPermissions(true)` | `--allow-dangerously-skip-permissions --dangerously-skip-permissions` | CLI subprocess blocks waiting for interactive user approval on every tool call, causing timeouts |
+| `WithBareMode()` | `--bare` | CLI outputs progress bars, spinners, ANSI escape codes that break the SDK's JSON message parser |
+| `WithSettingsOverride({"env": ...})` | `--settings '{...}'` | CLI reads `~/.claude/settings.json` which may override your custom API key/base URL; `WithEnvVar` alone is insufficient as CLI settings take higher precedence |
+
+**Complete working example:**
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    claude "github.com/godeps/claude-agent-sdk-go"
+    "github.com/godeps/claude-agent-sdk-go/types"
+)
+
+func main() {
+    ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+    defer cancel()
+
+    customBaseURL := "https://your-proxy.example.com/v1"
+    customAPIKey  := "sk-your-custom-api-key"
+    modelName     := "claude-sonnet-4-6"
+
+    opts := types.NewClaudeAgentOptions().
+        // (1) Permission bypass — prevent CLI from blocking on interactive approval
+        // Both flags are required: "allow" is the safety switch, "skip" is the actual bypass.
+        // SECURITY: Only use in sandboxed/automated environments.
+        WithAllowDangerouslySkipPermissions(true).
+        WithDangerouslySkipPermissions(true).
+
+        // (2) Bare mode — force pure JSON protocol output on stdout
+        // Without this, stdout contains ANSI codes and progress bars that break parsing.
+        WithBareMode().
+
+        // (3) Settings override — takes highest precedence over ~/.claude/settings.json
+        // Ensures your custom endpoint and API key are actually used by the CLI subprocess.
+        WithSettingsOverride(map[string]interface{}{
+            "env": map[string]interface{}{
+                "ANTHROPIC_BASE_URL": customBaseURL,
+                "ANTHROPIC_API_KEY":  customAPIKey,
+            },
+        }).
+
+        // Standard options
+        WithModel(modelName).
+        WithMaxTurns(5).
+        WithSystemPromptString("You are a helpful assistant.")
+
+    messages, err := claude.Query(ctx, "What is 2+2? Answer in one word.", opts)
+    if err != nil {
+        log.Fatalf("Query failed: %v", err)
+    }
+
+    for msg := range messages {
+        switch m := msg.(type) {
+        case *types.AssistantMessage:
+            for _, block := range m.Content {
+                if tb, ok := block.(*types.TextBlock); ok {
+                    fmt.Println(tb.Text)
+                }
+            }
+        case *types.ResultMessage:
+            cost := 0.0
+            if m.TotalCostUSD != nil {
+                cost = *m.TotalCostUSD
+            }
+            fmt.Printf("Cost: $%.6f, Session: %s\n", cost, m.SessionID)
+        }
+    }
+}
+```
+
+**Why all three are required:**
+
+Without `DangerouslySkipPermissions`, the CLI subprocess blocks waiting for terminal input on every tool call — your program hangs with no output. Without `BareMode`, stdout is polluted with rich UI content that the SDK's JSON line parser cannot decode. Without `SettingsOverride`, the CLI may read a different API key or base URL from the user's local `~/.claude/settings.json`, ignoring your custom endpoint entirely.
+
+**Belt-and-suspenders approach** (recommended for production):
 
 ```go
 opts := types.NewClaudeAgentOptions().
-    WithModel("glm-5.1").
-    WithBaseURL("https://dashscope.aliyuncs.com/apps/anthropic")
+    WithAllowDangerouslySkipPermissions(true).
+    WithDangerouslySkipPermissions(true).
+    WithBareMode().
+    // Layer 1: CLI --settings override (highest priority)
+    WithSettingsOverride(map[string]interface{}{
+        "env": map[string]interface{}{
+            "ANTHROPIC_BASE_URL": baseURL,
+            "ANTHROPIC_API_KEY":  apiKey,
+        },
+    }).
+    // Layer 2: subprocess environment variable
+    WithBaseURL(baseURL).
+    WithEnvVar("ANTHROPIC_API_KEY", apiKey).
+    // Layer 3: CLI --model flag + ANTHROPIC_MODEL env var
+    WithModel("claude-sonnet-4-6").
+    WithMaxTurns(10)
 ```
 
-Or set via environment variables:
+Or set via environment variables (simpler but less reliable):
 ```bash
 export ANTHROPIC_BASE_URL=https://dashscope.aliyuncs.com/apps/anthropic
 export ANTHROPIC_AUTH_TOKEN=your-token
 export LLM_MODEL=glm-5.1
 ```
+
+See [examples/configuration/custom_endpoint](examples/configuration/custom_endpoint/main.go) for the full runnable example.
 
 ### Event Callbacks
 
@@ -691,6 +791,7 @@ Check out the [examples directory](examples/) for detailed usage examples:
 - [Interactive Client](examples/basic/interactive_client/main.go) - Multi-turn conversation
 
 ### Configuration Examples
+- [Custom Endpoint](examples/configuration/custom_endpoint/main.go) - **Critical: three required settings for custom/proxy endpoints**
 - [System Prompt](examples/configuration/system_prompt/main.go) - Custom system prompts
 - [Max Budget USD](examples/configuration/max_budget_usd/main.go) - Budget limits
 - [Setting Sources](examples/configuration/setting_sources/main.go) - Configuration sources

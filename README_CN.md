@@ -94,22 +94,124 @@ func main() {
 }
 ```
 
-## 第三方 API 兼容
+## 第三方 API / 自定义端点（重要）
 
-支持兼容 Claude 协议的第三方 API（如 DashScope、OpenRouter）：
+使用自定义模型端点（代理、自托管、或第三方兼容 API 如 DashScope、OpenRouter）时，**必须**配置三个关键设置，否则 CLI 子进程无法正常工作：
+
+| 配置 | CLI 参数 | 解决的问题 |
+|------|---------|-----------|
+| `WithAllowDangerouslySkipPermissions(true)` + `WithDangerouslySkipPermissions(true)` | `--allow-dangerously-skip-permissions --dangerously-skip-permissions` | CLI 子进程在每次工具调用时阻塞等待终端交互授权，导致超时无输出 |
+| `WithBareMode()` | `--bare` | CLI 输出包含进度条、spinner、ANSI 转义码，SDK 的 JSON 消息解析器无法正确解析 |
+| `WithSettingsOverride({"env": ...})` | `--settings '{...}'` | CLI 读取 `~/.claude/settings.json` 可能覆盖你的 API key/base URL；仅用 `WithEnvVar` 不够，因为 CLI settings 优先级更高 |
+
+**完整可运行示例：**
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    claude "github.com/godeps/claude-agent-sdk-go"
+    "github.com/godeps/claude-agent-sdk-go/types"
+)
+
+func main() {
+    ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+    defer cancel()
+
+    customBaseURL := "https://your-proxy.example.com/v1"
+    customAPIKey  := "sk-your-custom-api-key"
+    modelName     := "claude-sonnet-4-6"
+
+    opts := types.NewClaudeAgentOptions().
+        // (1) 跳过权限检查 — 防止 CLI 阻塞等待交互式授权
+        // 两个 flag 缺一不可："allow" 是安全开关，"skip" 是实际跳过。
+        // 安全警告：仅在沙箱/自动化环境中使用。
+        WithAllowDangerouslySkipPermissions(true).
+        WithDangerouslySkipPermissions(true).
+
+        // (2) Bare mode — 强制 stdout 输出纯 JSON 协议消息
+        // 没有这个，stdout 包含 ANSI 码和进度条，SDK 解析器会报错。
+        WithBareMode().
+
+        // (3) Settings override — 优先级最高，覆盖 ~/.claude/settings.json
+        // 确保自定义端点和 API key 被 CLI 子进程实际使用。
+        WithSettingsOverride(map[string]interface{}{
+            "env": map[string]interface{}{
+                "ANTHROPIC_BASE_URL": customBaseURL,
+                "ANTHROPIC_API_KEY":  customAPIKey,
+            },
+        }).
+
+        // 常规配置
+        WithModel(modelName).
+        WithMaxTurns(5).
+        WithSystemPromptString("你是一个有用的助手。")
+
+    messages, err := claude.Query(ctx, "1+1等于几？一个字回答。", opts)
+    if err != nil {
+        log.Fatalf("查询失败: %v", err)
+    }
+
+    for msg := range messages {
+        switch m := msg.(type) {
+        case *types.AssistantMessage:
+            for _, block := range m.Content {
+                if tb, ok := block.(*types.TextBlock); ok {
+                    fmt.Println(tb.Text)
+                }
+            }
+        case *types.ResultMessage:
+            cost := 0.0
+            if m.TotalCostUSD != nil {
+                cost = *m.TotalCostUSD
+            }
+            fmt.Printf("费用: $%.6f, 会话: %s\n", cost, m.SessionID)
+        }
+    }
+}
+```
+
+**为什么三者缺一不可：**
+
+- 没有 `DangerouslySkipPermissions` — CLI 子进程在每次工具调用时阻塞等待终端输入，你的程序会卡死无输出
+- 没有 `BareMode` — stdout 被 rich UI 内容污染，SDK 的 JSON line 解析器无法解码
+- 没有 `SettingsOverride` — CLI 可能从用户本地 `~/.claude/settings.json` 读取不同的 API key 或 base URL，完全忽略你的自定义端点
+
+**生产环境推荐的三层配置**（belt-and-suspenders）：
 
 ```go
 opts := types.NewClaudeAgentOptions().
-    WithModel("glm-5.1").
-    WithBaseURL("https://dashscope.aliyuncs.com/apps/anthropic")
+    WithAllowDangerouslySkipPermissions(true).
+    WithDangerouslySkipPermissions(true).
+    WithBareMode().
+    // 第 1 层：CLI --settings 覆盖（最高优先级）
+    WithSettingsOverride(map[string]interface{}{
+        "env": map[string]interface{}{
+            "ANTHROPIC_BASE_URL": baseURL,
+            "ANTHROPIC_API_KEY":  apiKey,
+        },
+    }).
+    // 第 2 层：子进程环境变量
+    WithBaseURL(baseURL).
+    WithEnvVar("ANTHROPIC_API_KEY", apiKey).
+    // 第 3 层：CLI --model 参数 + ANTHROPIC_MODEL 环境变量
+    WithModel("claude-sonnet-4-6").
+    WithMaxTurns(10)
 ```
 
-也可以通过环境变量配置：
+也可以通过环境变量配置（更简单但可靠性较低）：
 ```bash
 export ANTHROPIC_BASE_URL=https://dashscope.aliyuncs.com/apps/anthropic
 export ANTHROPIC_AUTH_TOKEN=your-token
 export LLM_MODEL=glm-5.1
 ```
+
+完整示例见 [examples/configuration/custom_endpoint](examples/configuration/custom_endpoint/main.go)。
 
 **真实运行示例**（使用 DashScope + glm-5.1）：
 ```
@@ -616,6 +718,7 @@ SDK 处理以下消息类型：
 - [交互式客户端](examples/basic/interactive_client/main.go) — 多轮对话
 
 ### 配置示例
+- [自定义端点](examples/configuration/custom_endpoint/main.go) — **重要：自定义/代理端点必需的三项关键配置**
 - [系统提示词](examples/configuration/system_prompt/main.go) — 自定义系统提示词
 - [预算限制](examples/configuration/max_budget_usd/main.go) — 费用控制
 - [配置来源](examples/configuration/setting_sources/main.go) — 配置源设置
