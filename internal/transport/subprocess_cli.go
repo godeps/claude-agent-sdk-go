@@ -49,6 +49,9 @@ type SubprocessCLITransport struct {
 	// MCP configuration file paths (will be cleaned up on Close)
 	mcpConfigFiles []string
 
+	// Usage interceptor proxy
+	usageProxy *UsageProxy
+
 	// Error tracking
 	mu    sync.Mutex
 	err   error
@@ -101,6 +104,46 @@ func (t *SubprocessCLITransport) Connect(ctx context.Context) error {
 
 	// Create cancellable context
 	t.ctx, t.cancel = context.WithCancel(ctx)
+
+	// Start usage interceptor proxy if enabled
+	if t.options != nil && t.options.EnableUsageInterceptor {
+		targetURL := ""
+		if t.options.BaseURL != nil {
+			targetURL = *t.options.BaseURL
+		}
+		if envURL, ok := t.env["ANTHROPIC_BASE_URL"]; ok && envURL != "" {
+			targetURL = envURL
+		}
+		if targetURL != "" {
+			proxy, err := NewUsageProxy(targetURL, t.logger)
+			if err == nil {
+				if err := proxy.Start(); err == nil {
+					t.usageProxy = proxy
+					proxyURL := proxy.ProxyURL()
+					// Override base URL to route through proxy
+					t.options.BaseURL = &proxyURL
+					t.env["ANTHROPIC_BASE_URL"] = proxyURL
+					// Also patch SettingsOverride if it contains ANTHROPIC_BASE_URL
+					if t.options.SettingsOverride != nil {
+						if envMap, ok := t.options.SettingsOverride["env"].(map[string]any); ok {
+							if _, exists := envMap["ANTHROPIC_BASE_URL"]; exists {
+								envMap["ANTHROPIC_BASE_URL"] = proxyURL
+							}
+						} else if envMap, ok := t.options.SettingsOverride["env"].(map[string]interface{}); ok {
+							if _, exists := envMap["ANTHROPIC_BASE_URL"]; exists {
+								envMap["ANTHROPIC_BASE_URL"] = proxyURL
+							}
+						}
+					}
+					t.logger.Debug("Usage interceptor proxy started at %s -> %s", proxyURL, targetURL)
+				} else {
+					t.logger.Warning("Failed to start usage proxy: %v", err)
+				}
+			} else {
+				t.logger.Warning("Failed to create usage proxy: %v", err)
+			}
+		}
+	}
 
 	// Build command arguments
 	args := t.buildCommandArgs()
@@ -713,6 +756,11 @@ func (t *SubprocessCLITransport) Close(ctx context.Context) error {
 		t.stdin = nil
 	}
 
+	// Stop usage proxy if running
+	if t.usageProxy != nil {
+		t.usageProxy.Stop()
+	}
+
 	// Cleanup MCP config files if they exist
 	for _, configFile := range t.mcpConfigFiles {
 		os.Remove(configFile)
@@ -771,6 +819,11 @@ func (t *SubprocessCLITransport) IsReady() bool {
 	defer t.mu.Unlock()
 
 	return t.ready
+}
+
+// GetUsageProxy returns the usage interceptor proxy (nil if not enabled).
+func (t *SubprocessCLITransport) GetUsageProxy() *UsageProxy {
+	return t.usageProxy
 }
 
 // GetError returns any error that occurred during transport operation.

@@ -194,6 +194,9 @@ type ClaudeAgentOptions struct {
 	NoMarkdown       bool                   `json:"no_markdown,omitempty"`
 	SettingsOverride map[string]interface{} `json:"settings_override,omitempty"`
 
+	// Usage interceptor: when enabled, starts a local proxy to measure actual request sizes.
+	EnableUsageInterceptor bool `json:"-"`
+
 	// Callbacks (not marshaled to JSON)
 	CanUseTool CanUseToolFunc              `json:"-"`
 	Hooks      map[HookEvent][]HookMatcher `json:"-"`
@@ -669,6 +672,13 @@ func (o *ClaudeAgentOptions) WithMcpSdkServer(name string, server *ToolServerCon
 }
 
 // --- P0: CLI Flags ---
+
+// WithUsageInterceptor enables a local reverse proxy to capture actual API request sizes.
+// This allows accurate measurement of system prompt and tool definition token overhead.
+func (o *ClaudeAgentOptions) WithUsageInterceptor(enable bool) *ClaudeAgentOptions {
+	o.EnableUsageInterceptor = enable
+	return o
+}
 
 // WithBareMode enables bare mode (minimal output, no status messages).
 func (o *ClaudeAgentOptions) WithBareMode() *ClaudeAgentOptions {

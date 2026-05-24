@@ -205,6 +205,22 @@ func Query(ctx context.Context, prompt string, options *types.ClaudeAgentOptions
 					return
 				}
 
+				// Inject usage proxy data into ResultMessage
+				if resultMsg, isResult := msg.(*types.ResultMessage); isResult {
+					if proxy := transportInst.GetUsageProxy(); proxy != nil {
+						summary := proxy.Summary()
+						if resultMsg.Usage == nil {
+							resultMsg.Usage = make(map[string]interface{})
+						}
+						resultMsg.Usage["proxy_system_prompt_chars"] = summary.SystemPromptChars
+						resultMsg.Usage["proxy_messages_chars"] = summary.MessagesChars
+						resultMsg.Usage["proxy_tools_count"] = summary.ToolsCount
+						resultMsg.Usage["proxy_total_body_bytes"] = summary.TotalBodyBytes
+						resultMsg.Usage["proxy_est_input_tokens"] = summary.EstInputTokens
+						resultMsg.Usage["proxy_total_requests"] = summary.TotalRequests
+					}
+				}
+
 				// Forward message to output
 				select {
 				case outputChan <- msg:
