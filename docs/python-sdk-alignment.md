@@ -181,7 +181,7 @@ tool, _ := greetTool.Build()
 ```python
 from claude_agent_sdk import query, ClaudeAgentOptions
 
-options = ClaudeAgentOptions(model="claude-sonnet-4-5")
+options = ClaudeAgentOptions(model="claude-sonnet-4-6")
 async for msg in query("Hello", options):
     if msg.type == "assistant":
         print(msg.content[0].text)
@@ -194,7 +194,7 @@ import (
     "github.com/godeps/claude-agent-sdk-go/types"
 )
 
-opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-5")
+opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-6")
 messages, _ := claude.Query(ctx, "Hello", opts)
 for msg := range messages {
     if assistantMsg, ok := msg.(*types.AssistantMessage); ok {

@@ -176,8 +176,8 @@ func TestParseMessage_AssistantMessage(t *testing.T) {
 				if textBlock.Text != "Hi there! How can I help you today?" {
 					t.Errorf("unexpected text content: %s", textBlock.Text)
 				}
-				if assistantMsg.Model != "claude-sonnet-4-5-20250929" {
-					t.Errorf("expected model 'claude-sonnet-4-5-20250929', got '%s'", assistantMsg.Model)
+				if assistantMsg.Model != "claude-sonnet-4-6" {
+					t.Errorf("expected model 'claude-sonnet-4-6', got '%s'", assistantMsg.Model)
 				}
 			},
 		},

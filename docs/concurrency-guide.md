@@ -305,7 +305,7 @@ import (
 func main() {
     ctx := context.Background()
     opts := types.NewClaudeAgentOptions().
-        WithModel("claude-sonnet-4-5-20250929")
+        WithModel("claude-sonnet-4-6")
     
     var wg sync.WaitGroup
     
@@ -384,7 +384,7 @@ import (
 func main() {
     ctx := context.Background()
     opts := types.NewClaudeAgentOptions().
-        WithModel("claude-sonnet-4-5-20250929")
+        WithModel("claude-sonnet-4-6")
     
     // Create a thread-safe client
     client, err := claude.NewConcurrentClient(ctx, opts)
@@ -473,7 +473,7 @@ import (
 func main() {
     ctx := context.Background()
     opts := types.NewClaudeAgentOptions().
-        WithModel("claude-sonnet-4-5-20250929")
+        WithModel("claude-sonnet-4-6")
     
     var wg sync.WaitGroup
     

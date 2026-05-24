@@ -23,7 +23,7 @@ func main() {
 	fmt.Println("Setting a very low budget to demonstrate the limit in action...")
 
 	opts1 := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithMaxBudgetUSD(0.01) // Very low budget to trigger limit quickly
 
 	fmt.Println("Query: Write a very long technical document about Go programming")
@@ -61,7 +61,7 @@ func main() {
 	fmt.Println("Setting a small but reasonable budget for a complex task...")
 
 	opts2 := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithMaxBudgetUSD(0.10) // Small budget for testing
 
 	fmt.Println("Query: Analyze a complex problem and provide detailed solution")

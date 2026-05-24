@@ -47,7 +47,7 @@ func main() {
 // which is the most straightforward and efficient approach.
 func pattern1OneClientPerGoroutine(ctx context.Context) {
 	opts := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	var wg sync.WaitGroup
 	numTasks := 3
@@ -99,7 +99,7 @@ func pattern1OneClientPerGoroutine(ctx context.Context) {
 // The ConcurrentClient wrapper provides thread-safety.
 func pattern2SharedConcurrentClient(ctx context.Context) {
 	opts := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	// Create a concurrent client (thread-safe)
 	client, err := claude.NewConcurrentClient(ctx, opts)
@@ -171,7 +171,7 @@ func pattern2SharedConcurrentClient(ctx context.Context) {
 // This is more complex and error-prone than using ConcurrentClient.
 func pattern3ManualSync(ctx context.Context) {
 	opts := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	client, err := claude.NewClient(ctx, opts)
 	if err != nil {
@@ -228,7 +228,7 @@ func pattern3ManualSync(ctx context.Context) {
 // so it's safe to call from multiple goroutines without any synchronization.
 func bonusQueryFunctionConcurrency(ctx context.Context) {
 	opts := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	var wg sync.WaitGroup
 	numTasks := 5
@@ -263,7 +263,7 @@ func bonusQueryFunctionConcurrency(ctx context.Context) {
 // Performance comparison
 func performanceComparison(ctx context.Context) {
 	opts := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	numTasks := 10
 

@@ -22,7 +22,7 @@ A concise reference for common Claude Agent SDK operations.
 ### Simple Query
 ```go
 ctx := context.Background()
-opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-5-20250929")
+opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-6")
 
 messages, err := claude.Query(ctx, "Hello, Claude!", opts)
 if err != nil {
@@ -62,8 +62,8 @@ for msg := range client.ReceiveResponse(ctx) {
 ### Common Options
 ```go
 opts := types.NewClaudeAgentOptions().
-    WithModel("claude-sonnet-4-5-20250929").
-    WithFallbackModel("claude-3-5-haiku-latest").
+    WithModel("claude-sonnet-4-6").
+    WithFallbackModel("claude-haiku-4-5").
     WithMaxTurns(10).
     WithMaxBudgetUSD(1.0).
     WithSystemPromptString("You are a helpful assistant.").

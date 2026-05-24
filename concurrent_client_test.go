@@ -117,7 +117,7 @@ func TestConcurrentClient_NilOptions(t *testing.T) {
 func ExampleConcurrentClient() {
 	ctx := context.Background()
 	opts := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	client, err := NewConcurrentClient(ctx, opts)
 	if err != nil {

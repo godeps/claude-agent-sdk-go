@@ -231,7 +231,7 @@ func TestClient_Integration(t *testing.T) {
 	defer cancel()
 
 	opts := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithPermissionMode(types.PermissionModeBypassPermissions)
 
 	client, err := NewClient(ctx, opts)
@@ -307,7 +307,7 @@ func TestClient_MultipleQueries(t *testing.T) {
 	defer cancel()
 
 	opts := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithPermissionMode(types.PermissionModeBypassPermissions)
 
 	client, err := NewClient(ctx, opts)

@@ -35,7 +35,7 @@ func mainExample(ctx context.Context) error {
 
 	// Configure options with our callback
 	opts := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithCanUseTool(myPermissionCallback)
 
 	// Create client and send a query that will use multiple tools

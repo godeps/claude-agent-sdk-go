@@ -32,7 +32,7 @@ func main() {
 	}
 
 	opts1 := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithStderr(stderrCallback)
 
 	fmt.Println("Query: Simple question with stderr monitoring...")
@@ -92,7 +92,7 @@ func main() {
 	}
 
 	opts2 := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithStderr(advancedStderrCallback).
 		WithAllowedTools("Bash")
 

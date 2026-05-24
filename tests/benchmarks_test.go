@@ -151,7 +151,7 @@ func BenchmarkOptionsBuilder(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		opts := types.NewClaudeAgentOptions().
-			// WithModel("claude-sonnet-4-5-20250929").
+			// WithModel("claude-sonnet-4-6").
 			WithMaxTurns(10).
 			WithEnvVar("KEY1", "value1").
 			WithEnvVar("KEY2", "value2").
@@ -299,7 +299,7 @@ func BenchmarkQuery_WithAllocation(b *testing.B) {
 
 // BenchmarkParseJSON benchmarks raw JSON parsing.
 func BenchmarkParseJSON(b *testing.B) {
-	jsonData := []byte(`{"type":"assistant","content":[{"type":"text","text":"Hello world, this is a test message"}],"model":"claude-sonnet-4-5-20250929","id":"msg_123","role":"assistant"}`)
+	jsonData := []byte(`{"type":"assistant","content":[{"type":"text","text":"Hello world, this is a test message"}],"model":"claude-sonnet-4-6","id":"msg_123","role":"assistant"}`)
 
 	b.ResetTimer()
 	b.ReportAllocs()

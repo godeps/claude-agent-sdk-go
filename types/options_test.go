@@ -53,7 +53,7 @@ func TestOptionsChaining(t *testing.T) {
 	opts := NewClaudeAgentOptions().
 		WithMaxThinkingTokens(8000).
 		WithMaxBudgetUSD(25.00).
-		WithModel("claude-3-5-sonnet-20241022").
+		WithModel("claude-sonnet-4-6").
 		WithMaxTurns(10)
 
 	// Verify all values are set correctly
@@ -65,7 +65,7 @@ func TestOptionsChaining(t *testing.T) {
 		t.Error("MaxBudgetUSD not set correctly in chain")
 	}
 
-	if opts.Model == nil || *opts.Model != "claude-3-5-sonnet-20241022" {
+	if opts.Model == nil || *opts.Model != "claude-sonnet-4-6" {
 		t.Error("Model not set correctly in chain")
 	}
 

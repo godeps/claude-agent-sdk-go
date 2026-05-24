@@ -21,7 +21,7 @@ func main() {
 	// Example 1: Regular streaming (only complete messages)
 	fmt.Println("=== Example 1: Regular Streaming (Complete Messages Only) ===")
 	opts1 := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	fmt.Println("Query: Count from 1 to 10")
 	messages1, err := claude.Query(ctx, "Count from 1 to 10, saying each number slowly", opts1)
@@ -46,7 +46,7 @@ func main() {
 	// Example 2: Include partial messages
 	fmt.Println("=== Example 2: With Partial Messages ===")
 	opts2 := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithIncludePartialMessages(true) // Enable partial message streaming
 
 	fmt.Println("Query: Count from 1 to 10 (with partial messages)")

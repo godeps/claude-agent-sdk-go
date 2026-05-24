@@ -23,7 +23,7 @@ func main() {
 	fmt.Println("By default, Claude loads settings from all available sources...")
 
 	opts1 := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	fmt.Println("Query: What is the current configuration?")
 	messages1, err := claude.Query(ctx, "What is 2 + 2?", opts1)

@@ -43,7 +43,7 @@ func codeReviewerExample(ctx context.Context) error {
 
 	// Create options with the agent
 	opts := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithAgent("code-reviewer", agentDef)
 
 	// Query using the agent
@@ -95,7 +95,7 @@ func documentationWriterExample(ctx context.Context) error {
 
 	// Create options with the agent
 	opts := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithAgent("doc-writer", agentDef)
 
 	// Query using the agent
@@ -153,7 +153,7 @@ func multipleAgentsExample(ctx context.Context) error {
 
 	// Create options with multiple agents
 	opts := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithAgent("analyzer", analyzerDef).
 		WithAgent("tester", testerDef).
 		WithSettingSources("user", "project")

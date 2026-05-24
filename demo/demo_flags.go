@@ -42,7 +42,7 @@ func demoFlags() {
 			"permissions": map[string]interface{}{
 				"allow": []string{"Bash(*)"},
 			},
-			"model": "claude-sonnet-4-5-20250929",
+			"model": "claude-sonnet-4-6",
 		}).
 		WithMaxTurns(1)
 	fmt.Printf("  SettingsOverride: %v\n", opts3.SettingsOverride)
@@ -53,7 +53,7 @@ func demoFlags() {
 		WithBareMode().
 		WithNoMarkdown().
 		WithSettingsOverride(map[string]interface{}{"verbose": true}).
-		WithModel("claude-sonnet-4-5-20250929").
+		WithModel("claude-sonnet-4-6").
 		WithMaxTurns(3)
 	fmt.Printf("  Bare=%v, NoMarkdown=%v, Model=%s, MaxTurns=%d\n",
 		combined.BareMode, combined.NoMarkdown, *combined.Model, *combined.MaxTurns)

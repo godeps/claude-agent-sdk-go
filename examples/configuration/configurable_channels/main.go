@@ -23,7 +23,7 @@ func main() {
 	fmt.Println("Using default message channel capacity...")
 
 	opts1 := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	client1, err := claude.NewClient(ctx, opts1)
 	if err != nil {
@@ -38,7 +38,7 @@ func main() {
 	fmt.Println("Using larger message channel capacity for high-throughput scenarios...")
 
 	opts2 := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithMessageChannelCapacity(500) // Larger capacity for bursty message handling
 
 	client2, err := claude.NewClient(ctx, opts2)
@@ -54,7 +54,7 @@ func main() {
 	fmt.Println("Using smaller message channel capacity to conserve memory...")
 
 	opts3 := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithMessageChannelCapacity(5) // Smaller capacity to conserve memory
 
 	client3, err := claude.NewClient(ctx, opts3)

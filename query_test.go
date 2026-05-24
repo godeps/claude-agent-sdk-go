@@ -87,7 +87,7 @@ func TestQuery_WithOptions(t *testing.T) {
 	defer cancel()
 
 	opts := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithMaxTurns(5).
 		WithEnvVar("TEST", "value")
 
@@ -124,7 +124,7 @@ func TestQuery_Integration(t *testing.T) {
 	defer cancel()
 
 	opts := types.NewClaudeAgentOptions().
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithPermissionMode(types.PermissionModeBypassPermissions)
 
 	messages, err := Query(ctx, "What is 2+2? Reply with just the number.", opts)

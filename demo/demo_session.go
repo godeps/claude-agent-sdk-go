@@ -41,7 +41,7 @@ func demoSession() {
 	fmt.Println("\n--- Resume with extra config ---")
 	fullOpts := claude.ResumeSession(sessionID).
 		WithMaxTurns(5).
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 	fmt.Printf("  Session=%s, MaxTurns=%d, Model=%s\n",
 		*fullOpts.Resume, *fullOpts.MaxTurns, *fullOpts.Model)
 }

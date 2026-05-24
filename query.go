@@ -33,7 +33,7 @@ import (
 // Example usage:
 //
 //	ctx := context.Background()
-//	opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-5-20250929")
+//	opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-6")
 //	messages, err := Query(ctx, "What is 2+2?", opts)
 //	if err != nil {
 //	    if types.IsCLINotFoundError(err) {

@@ -41,7 +41,7 @@ func main() {
 // Python:
 //
 //	from claude_agent_sdk import query, ClaudeAgentOptions
-//	options = ClaudeAgentOptions(model="claude-sonnet-4-5")
+//	options = ClaudeAgentOptions(model="claude-sonnet-4-6")
 //	async for msg in query("Hello", options):
 //	    if msg.type == "assistant":
 //	        print(msg.content[0].text)
@@ -49,7 +49,7 @@ func example1BasicQuery(ctx context.Context) {
 	fmt.Println("Example 1: Basic Query")
 	fmt.Println("----------------------")
 	fmt.Println("Python equivalent:")
-	fmt.Println(`  options = ClaudeAgentOptions(model="claude-sonnet-4-5")`)
+	fmt.Println(`  options = ClaudeAgentOptions(model="claude-sonnet-4-6")`)
 	fmt.Println(`  async for msg in query("Hello", options):`)
 	fmt.Println(`      if msg.type == "assistant":`)
 	fmt.Println(`          print(msg.content[0].text)`)
@@ -57,7 +57,7 @@ func example1BasicQuery(ctx context.Context) {
 	fmt.Println("Go implementation:")
 
 	opts := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	messages, err := claude.Query(ctx, "Say hello in one sentence", opts)
 	if err != nil {
@@ -96,7 +96,7 @@ func example2InteractiveClient(ctx context.Context) {
 	fmt.Println("Go implementation:")
 
 	opts := types.NewClaudeAgentOptions().
-		WithModel("claude-sonnet-4-5-20250929")
+		WithModel("claude-sonnet-4-6")
 
 	client, err := claude.NewClient(ctx, opts)
 	if err != nil {

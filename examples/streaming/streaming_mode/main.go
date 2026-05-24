@@ -244,7 +244,7 @@ func withOptionsExample(ctx context.Context) error {
 		WithAllowedTools("Read", "Write").
 		WithSystemPrompt("You are a helpful coding assistant.").
 		WithEnv(map[string]string{
-			"ANTHROPIC_MODEL": "claude-sonnet-4-5",
+			"ANTHROPIC_MODEL": "claude-sonnet-4-6",
 		})
 
 	client, err := claude.NewClient(ctx, opts)

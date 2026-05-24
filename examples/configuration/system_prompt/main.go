@@ -72,8 +72,8 @@ func main() {
 	fmt.Println("=== Example 3: System Prompt with Tools Context and Fallback Model ===")
 	opts3 := types.NewClaudeAgentOptions().
 		WithSystemPrompt("You are a coding assistant. You can use the Bash, Read, and Write tools to help with programming tasks. Always explain your approach before using tools.").
-		// WithModel("claude-sonnet-4-5-20250929").
-		WithFallbackModel("claude-3-5-haiku-latest"). // Fallback if primary model unavailable
+		// WithModel("claude-sonnet-4-6").
+		WithFallbackModel("claude-haiku-4-5"). // Fallback if primary model unavailable
 		WithAllowedTools("Bash", "Read", "Write")
 
 	messages, err = claude.Query(ctx, "Show me how to check the current directory and list files", opts3)

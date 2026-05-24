@@ -5,7 +5,7 @@
 // 1. Query function for simple, one-shot interactions:
 //
 //	ctx := context.Background()
-//	opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-5-20250929")
+//	opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-6")
 //	messages, err := Query(ctx, "What is 2+2?", opts)
 //	if err != nil {
 //	    log.Fatal(err)
@@ -79,7 +79,7 @@
 // Use ClaudeAgentOptions to configure the SDK:
 //
 //	opts := types.NewClaudeAgentOptions().
-//	    WithModel("claude-sonnet-4-5-20250929").
+//	    WithModel("claude-sonnet-4-6").
 //	    WithCWD("/path/to/project").
 //	    WithPermissionMode(types.PermissionModeAcceptEdits).
 //	    WithMaxTurns(10)

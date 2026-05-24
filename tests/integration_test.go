@@ -86,7 +86,7 @@ func TestQueryIntegration_WithOptions(t *testing.T) {
 	// Execute query with options
 	opts := types.NewClaudeAgentOptions().
 		WithCLIPath(mockCLI.Path).
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithMaxTurns(5).
 		WithEnvVar("TEST_VAR", "test_value").
 		WithPermissionMode(types.PermissionModeBypassPermissions)
@@ -496,7 +496,7 @@ func TestControlProtocol_FullFlow(t *testing.T) {
 	// Create client
 	opts := types.NewClaudeAgentOptions().
 		WithCLIPath(cliPath).
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithCanUseTool(canUseTool)
 
 	client, err := claude.NewClient(ctx, opts)
@@ -618,7 +618,7 @@ func TestRealCLIIntegration(t *testing.T) {
 	// Simple query test
 	opts := types.NewClaudeAgentOptions().
 		WithCLIPath(cliPath).
-		// WithModel("claude-sonnet-4-5-20250929").
+		// WithModel("claude-sonnet-4-6").
 		WithPermissionMode(types.PermissionModeBypassPermissions)
 
 	msgChan, err := claude.Query(ctx, "Say 'hello' and nothing else.", opts)

@@ -67,7 +67,7 @@ import (
 
 func main() {
     ctx := context.Background()
-    opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-5-20250929")
+    opts := types.NewClaudeAgentOptions().WithModel("claude-sonnet-4-6")
 
     messages, err := claude.Query(ctx, "1+1等于几？", opts)
     if err != nil {
@@ -135,8 +135,8 @@ Prompt: Create a file called /tmp/hello_sdk_test.txt with the content 'Hello fro
 
 ```go
 opts := types.NewClaudeAgentOptions().
-    WithModel("claude-sonnet-4-5-20250929").      // 主模型
-    WithFallbackModel("claude-3-5-haiku-latest"). // 备用模型
+    WithModel("claude-sonnet-4-6").      // 主模型
+    WithFallbackModel("claude-haiku-4-5"). // 备用模型
     WithAllowedTools("Bash", "Write", "Read").    // 允许的工具
     WithPermissionMode(types.PermissionModeAcceptEdits). // 权限模式
     WithMaxBudgetUSD(1.0).                        // 预算限制
@@ -558,79 +558,36 @@ if err != nil {
 
 ## 线程安全与并发
 
-### 设计理念：有意非线程安全
+`Client` 类型**有意设计为非线程安全** — 每个 Client 代表单个对话会话，会话天然是顺序的。
 
-`Client` 类型**有意设计为非线程安全**。这是一个深思熟虑的设计选择。
+### 推荐模式
 
-**原因：**
-1. **会话语义** — 每个 `Client` 代表单个对话会话，会话天然是顺序的
-2. **性能** — 99% 场景（单协程使用）无锁开销
-3. **明确所有权** — 每个协程拥有自己的 Client，防止共享状态 bug
-4. **Python SDK 对齐** — 与 Python SDK 的 `ClaudeSDKClient` 设计一致
-
-### 推荐模式：每个协程一个 Client
+| 模式 | 线程安全 | 适用场景 | 推荐 |
+|------|----------|----------|------|
+| 每协程一个 Client | 隔离安全 | 独立任务 | **推荐** |
+| `Query()` 函数 | 隔离安全 | 一次性无状态查询 | **推荐** |
+| `ConcurrentClient` | 同步安全 | 共享会话（极少） | 谨慎使用 |
 
 ```go
-// 最佳实践
-func processTask(ctx context.Context, task string, opts *types.ClaudeAgentOptions) error {
-    client, err := claude.NewClient(ctx, opts)
-    if err != nil {
-        return err
-    }
-    defer client.Close(ctx)
-
-    if err := client.Connect(ctx); err != nil {
-        return err
-    }
-
-    if err := client.Query(ctx, task); err != nil {
-        return err
-    }
-
-    for msg := range client.ReceiveResponse(ctx) {
-        // 处理消息
-    }
-    return nil
-}
-
-// 启动并发任务
+// 最佳实践：每个协程一个 Client
 var wg sync.WaitGroup
 for _, task := range tasks {
     wg.Add(1)
     go func(t string) {
         defer wg.Done()
-        processTask(ctx, t, opts)
+        client, _ := claude.NewClient(ctx, opts)
+        defer client.Close(ctx)
+        client.Connect(ctx)
+        client.Query(ctx, t)
+        for msg := range client.ReceiveResponse(ctx) {
+            // 处理消息
+        }
     }(task)
 }
 wg.Wait()
 ```
 
-### Query 函数（天然并发安全）
-
-```go
-var wg sync.WaitGroup
-for i := 0; i < 10; i++ {
-    wg.Add(1)
-    go func(id int) {
-        defer wg.Done()
-        messages, _ := claude.Query(ctx, fmt.Sprintf("任务 %d", id), opts)
-        for msg := range messages {
-            // 处理消息
-        }
-    }(i)
-}
-wg.Wait()
-```
-
-### 并发模式对比
-
-| 模式 | 线程安全 | 性能 | 适用场景 | 推荐 |
-|------|----------|------|----------|------|
-| 每协程一个 Client | 隔离安全 | 最优 | 独立任务 | **推荐** |
-| ConcurrentClient | 同步安全 | 一般 | 共享会话 | 极少使用 |
-| Query 函数 | 隔离安全 | 优秀 | 一次性查询 | **推荐** |
-
-详见 [并发指南](docs/concurrency-guide.md) 和 [并发示例](examples/advanced/concurrent_usage/main.go)。
+详细的设计原理、性能分析和高级示例请参阅 [并发指南](docs/concurrency-guide.md)。
 
 ## 消息类型
 

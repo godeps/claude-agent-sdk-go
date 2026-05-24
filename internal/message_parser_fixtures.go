@@ -48,7 +48,7 @@ var (
 				"text": "Hi there! How can I help you today?"
 			}
 		],
-		"model": "claude-sonnet-4-5-20250929"
+		"model": "claude-sonnet-4-6"
 	}`)
 
 	assistantMessageToolUse = []byte(`{
@@ -67,7 +67,7 @@ var (
 				}
 			}
 		],
-		"model": "claude-sonnet-4-5-20250929"
+		"model": "claude-sonnet-4-6"
 	}`)
 
 	assistantMessageThinking = []byte(`{
@@ -83,7 +83,7 @@ var (
 				"text": "Based on my analysis..."
 			}
 		],
-		"model": "claude-sonnet-4-5-20250929",
+		"model": "claude-sonnet-4-6",
 		"parent_tool_use_id": "parent_tool_xyz"
 	}`)
 
@@ -108,7 +108,7 @@ var (
 				}
 			}
 		],
-		"model": "claude-sonnet-4-5-20250929"
+		"model": "claude-sonnet-4-6"
 	}`)
 
 	// System messages
@@ -173,7 +173,7 @@ var (
 				"type": "message",
 				"role": "assistant",
 				"content": [],
-				"model": "claude-sonnet-4-5-20250929"
+				"model": "claude-sonnet-4-6"
 			}
 		}
 	}`)
@@ -302,7 +302,7 @@ var (
 				"extra_block_field": "ignored"
 			}
 		],
-		"model": "claude-sonnet-4-5-20250929",
+		"model": "claude-sonnet-4-6",
 		"new_api_feature": true
 	}`)
 
@@ -370,6 +370,6 @@ var (
 				"input": {"command": "echo test"}
 			}
 		],
-		"model": "claude-sonnet-4-5-20250929"
+		"model": "claude-sonnet-4-6"
 	}`)
 )
