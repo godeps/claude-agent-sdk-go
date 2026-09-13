@@ -120,11 +120,23 @@ func (s *SdkMCPServer) HandleMessage(msg map[string]interface{}) (map[string]int
 }
 
 // handleInitialize handles the initialize request from the client.
+//
+// MCP version negotiation (mirrors the TS SDK's McpServer._oninitialize):
+// echo the client's requested protocolVersion when it is in our supported
+// set, otherwise fall back to our latest. The Claude CLI sends a real MCP
+// version (e.g. "2025-11-25") and ABANDONS the handshake if the server
+// answers anything else — the previous hardcoded "0.1.0" made the CLI never
+// call tools/list, so in-process SDK MCP tools were invisible to the model.
 func (s *SdkMCPServer) handleInitialize(msg map[string]interface{}) (map[string]interface{}, error) {
 	id := msg["id"]
 
+	clientVersion := ""
+	if params, ok := msg["params"].(map[string]interface{}); ok {
+		clientVersion, _ = params["protocolVersion"].(string)
+	}
+
 	result := map[string]interface{}{
-		"protocolVersion": "0.1.0",
+		"protocolVersion": negotiateProtocolVersion(clientVersion),
 		"capabilities": map[string]interface{}{
 			"tools": map[string]interface{}{
 				"listChanged": false,
@@ -138,6 +150,31 @@ func (s *SdkMCPServer) handleInitialize(msg map[string]interface{}) (map[string]
 
 	resp := NewSuccessResponse(id, result)
 	return responseToMap(resp), nil
+}
+
+// latestMCPProtocolVersion is the newest MCP protocol version this server
+// implements (kept in sync with the TS SDK's default, nI).
+const latestMCPProtocolVersion = "2025-11-25"
+
+// supportedMCPProtocolVersions mirrors the TS SDK's JZ set, newest first.
+var supportedMCPProtocolVersions = []string{
+	"2025-11-25",
+	"2025-06-18",
+	"2025-03-26",
+	"2024-11-05",
+	"2024-10-07",
+}
+
+// negotiateProtocolVersion implements MCP version negotiation: if the client's
+// requested version is supported, echo it; otherwise answer with our latest
+// supported version (per the MCP spec's negotiation rules).
+func negotiateProtocolVersion(clientVersion string) string {
+	for _, v := range supportedMCPProtocolVersions {
+		if v == clientVersion {
+			return clientVersion
+		}
+	}
+	return latestMCPProtocolVersion
 }
 
 // handleToolsList handles the tools/list request.

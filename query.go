@@ -150,6 +150,16 @@ func Query(ctx context.Context, prompt string, options *types.ClaudeAgentOptions
 		return nil, err
 	}
 
+	// Run the control-protocol handshake BEFORE sending the prompt. When SDK
+	// MCP servers are configured this declares them (sdkMcpServers) so the CLI
+	// pulls their tools over mcp_message; with no SDK servers and non-streaming
+	// mode Initialize is a no-op, preserving the prompt-only fast path.
+	if _, err := queryHandler.Initialize(ctx); err != nil {
+		_ = queryHandler.Stop(ctx)
+		_ = transportInst.Close(ctx)
+		return nil, err
+	}
+
 	// Use resume ID as session ID, or default if not resuming
 	sessionID := "default-session"
 	if resumeID != "" {

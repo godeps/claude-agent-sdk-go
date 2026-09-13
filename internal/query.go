@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -109,7 +110,13 @@ func NewQuery(ctx context.Context, transport transport.Transport, opts *types.Cl
 
 // Initialize sends initialization control request if in streaming mode.
 func (q *Query) Initialize(ctx context.Context) (map[string]interface{}, error) {
-	if !q.isStreamingMode {
+	// The control-protocol handshake is required whenever the CLI must learn
+	// about in-process SDK MCP servers (it discovers them via the initialize
+	// request's sdkMcpServers field, then pulls tools over mcp_message).
+	// Streaming mode always handshakes; single-shot mode handshakes only when
+	// SDK MCP servers are configured — otherwise the prompt-only fast path is
+	// preserved for callers with no control-plane needs.
+	if !q.isStreamingMode && !q.hasMCPServers() {
 		return nil, nil
 	}
 
@@ -154,6 +161,17 @@ func (q *Query) Initialize(ctx context.Context) (map[string]interface{}, error) 
 	if len(hooksConfig) > 0 {
 		request["hooks"] = hooksConfig
 	}
+	// Declare in-process SDK MCP servers so the CLI learns to pull their
+	// tools over the mcp_message control channel (TS SDK parity: the CLI
+	// only knows an SDK server exists if initialize names it).
+	if names := q.mcpServerNames(); len(names) > 0 {
+		request["sdkMcpServers"] = names
+		configs := make(map[string]interface{}, len(names))
+		for _, n := range names {
+			configs[n] = map[string]interface{}{}
+		}
+		request["sdkMcpServerConfigs"] = configs
+	}
 
 	result, err := q.sendControlRequest(ctx, request)
 	if err != nil {
@@ -165,6 +183,29 @@ func (q *Query) Initialize(ctx context.Context) (map[string]interface{}, error) 
 	q.initializeResult = result
 	q.logger.Debug("Control protocol initialized successfully")
 	return result, nil
+}
+
+// hasMCPServers reports whether any in-process SDK MCP server is registered.
+func (q *Query) hasMCPServers() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.mcpServers) > 0
+}
+
+// mcpServerNames returns the registered SDK MCP server names (sorted for
+// deterministic initialize payloads).
+func (q *Query) mcpServerNames() []string {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if len(q.mcpServers) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(q.mcpServers))
+	for name := range q.mcpServers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // Start begins the control message handling loop.
@@ -647,7 +688,11 @@ func (q *Query) handleMCPMessage(requestData map[string]interface{}) (map[string
 
 // sendControlRequest sends a control request to CLI and waits for response.
 func (q *Query) sendControlRequest(ctx context.Context, request map[string]interface{}) (map[string]interface{}, error) {
-	if !q.isStreamingMode {
+	// Control requests need the bidirectional stream. Streaming mode always
+	// has it; single-shot mode has it too whenever SDK MCP servers are
+	// configured (the transport is stream-json in both cases, and the CLI
+	// answers control frames over the same stdin/stdout pipes).
+	if !q.isStreamingMode && !q.hasMCPServers() {
 		return nil, types.NewControlProtocolError("control requests require streaming mode")
 	}
 
