@@ -319,6 +319,11 @@ type AssistantMessage struct {
 	Model           string                 `json:"model"`
 	ParentToolUseID *string                `json:"parent_tool_use_id,omitempty"`
 	Error           *AssistantMessageError `json:"error,omitempty"`
+	// ContextUsage is the structured twin of the /context report, present
+	// only on the synthetic assistant message that delivers the markdown
+	// table (newer CLIs). Wrapper-level sibling of Content — never inside
+	// message.content, so it is not replayed to the model.
+	ContextUsage *ContextUsage `json:"context_usage,omitempty"`
 }
 
 // GetMessageType returns the type of the message.
@@ -411,6 +416,34 @@ type SystemMessage struct {
 	Response  map[string]interface{} `json:"response,omitempty"`   // For control_response messages
 	Request   map[string]interface{} `json:"request,omitempty"`    // For control_request messages
 	RequestID string                 `json:"request_id,omitempty"` // For control_request/control_response messages (top-level field)
+
+	// CompactMetadata carries the compaction payload of a
+	// system/compact_boundary message (trigger, pre/post tokens, preserved
+	// message UUIDs). Top-level wire field — previously dropped by the
+	// generic Data map; typed here so hosts can observe compaction.
+	CompactMetadata *CompactBoundaryMetadata `json:"compact_metadata,omitempty"`
+
+	// Commands carries the full slash-command list of a system/
+	// commands_changed message (fire-and-forget push after a mid-session
+	// change, e.g. skills discovered dynamically). Clients should REPLACE
+	// their cached command list with this payload.
+	Commands []SlashCommand `json:"commands,omitempty"`
+
+	// UUID and SessionID identify the message within the CLI session
+	// (present on compact_boundary / commands_changed frames).
+	UUID      string `json:"uuid,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+}
+
+// IsCompactBoundary reports whether this is a system/compact_boundary message
+// emitted when the CLI compacted the conversation context.
+func (m *SystemMessage) IsCompactBoundary() bool {
+	return m.Subtype == SystemSubtypeCompactBoundary
+}
+
+// IsCommandsChanged reports whether this is a system/commands_changed push.
+func (m *SystemMessage) IsCommandsChanged() bool {
+	return m.Subtype == SystemSubtypeCommandsChanged
 }
 
 // GetMessageType returns the type of the message.

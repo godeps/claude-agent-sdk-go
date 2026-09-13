@@ -13,7 +13,7 @@ var demos = map[string]func(){
 	"events":     demoEvents,
 	"logging":    demoLogging,
 	"retry":      demoRetry,
-	"middleware":  demoMiddleware,
+	"middleware": demoMiddleware,
 	"pool":       demoPool,
 	"cost":       demoCost,
 	"auth":       demoAuth,

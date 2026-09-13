@@ -95,9 +95,9 @@ func TestNewLoggerFromSlog_Nil(t *testing.T) {
 
 func TestNewLoggerWithLevel(t *testing.T) {
 	tests := []struct {
-		name            string
-		level           slog.Level
-		expectVerbose   bool
+		name          string
+		level         slog.Level
+		expectVerbose bool
 	}{
 		{"debug_level", slog.LevelDebug, true},
 		{"info_level", slog.LevelInfo, false},

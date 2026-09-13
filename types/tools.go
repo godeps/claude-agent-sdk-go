@@ -38,7 +38,6 @@ type ToolResult struct {
 	IsError bool `json:"isError,omitempty"`
 }
 
-
 // ToolFunc is the function signature for tool handler functions.
 type ToolFunc func(
 	ctx context.Context,
@@ -73,10 +72,10 @@ type ToolParam struct {
 // The tool name should be unique within an MCP server.
 func NewTool(name string) *ToolBuilder {
 	return &ToolBuilder{
-		name:   name,
-		params: []ToolParam{},
+		name:     name,
+		params:   []ToolParam{},
 		required: []string{},
-		enums: make(map[string][]interface{}),
+		enums:    make(map[string][]interface{}),
 	}
 }
 

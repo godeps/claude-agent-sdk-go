@@ -220,7 +220,7 @@ type ClaudeAgentOptions struct {
 	RetryConfig *RetryConfig `json:"-"`
 
 	// Cost guard
-	CostLimitUSD      *float64           `json:"-"`
+	CostLimitUSD      *float64            `json:"-"`
 	OnCostLimitExceed func(spent float64) `json:"-"`
 
 	// Auth provider

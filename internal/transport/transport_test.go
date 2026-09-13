@@ -1084,9 +1084,9 @@ func TestMCPServersStringPath(t *testing.T) {
 
 // TestBuildCommandArgs_CustomEndpointTriple verifies the three critical configurations
 // for custom endpoint usage are correctly translated to CLI arguments:
-//   1. --allow-dangerously-skip-permissions + --dangerously-skip-permissions
-//   2. --bare
-//   3. --settings (JSON override with env)
+//  1. --allow-dangerously-skip-permissions + --dangerously-skip-permissions
+//  2. --bare
+//  3. --settings (JSON override with env)
 func TestBuildCommandArgs_CustomEndpointTriple(t *testing.T) {
 	opts := types.NewClaudeAgentOptions().
 		WithAllowDangerouslySkipPermissions(true).

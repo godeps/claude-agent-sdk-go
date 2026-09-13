@@ -186,8 +186,8 @@ func (g *UUIDGenerator) Generate() interface{} {
 
 // IncrementingIDGenerator generates incrementing integer IDs.
 type IncrementingIDGenerator struct {
-	mu  sync.Mutex
-	id  int64
+	mu sync.Mutex
+	id int64
 }
 
 // NewIncrementingIDGenerator creates a new incrementing ID generator.

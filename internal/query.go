@@ -703,6 +703,14 @@ func (q *Query) SendControlRequest(ctx context.Context, request map[string]inter
 	return q.sendControlRequest(ctx, request)
 }
 
+// InitializeResultRaw returns the raw control-protocol initialize response
+// (SDKControlInitializeResponse wire shape), or nil before initialization.
+func (q *Query) InitializeResultRaw() map[string]interface{} {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.initializeResult
+}
+
 // sendSuccessResponse sends a success control response.
 func (q *Query) sendSuccessResponse(requestID string, response map[string]interface{}) {
 	controlResponse := map[string]interface{}{

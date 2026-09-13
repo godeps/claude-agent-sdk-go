@@ -17,8 +17,8 @@ type CodeReview struct {
 }
 
 type SentimentResult struct {
-	Sentiment  string  `json:"sentiment" description:"positive, negative, or neutral"`
-	Confidence float64 `json:"confidence" description:"Confidence score 0.0-1.0"`
+	Sentiment  string   `json:"sentiment" description:"positive, negative, or neutral"`
+	Confidence float64  `json:"confidence" description:"Confidence score 0.0-1.0"`
 	Keywords   []string `json:"keywords,omitempty" description:"Key phrases detected"`
 }
 

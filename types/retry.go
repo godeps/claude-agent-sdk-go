@@ -4,11 +4,11 @@ import "time"
 
 // RetryConfig configures automatic retry behavior for transient failures.
 type RetryConfig struct {
-	MaxRetries     int
-	InitialBackoff time.Duration
-	MaxBackoff     time.Duration
-	Multiplier     float64
-	JitterFraction float64
+	MaxRetries      int
+	InitialBackoff  time.Duration
+	MaxBackoff      time.Duration
+	Multiplier      float64
+	JitterFraction  float64
 	RetryableErrors []func(error) bool
 }
 
