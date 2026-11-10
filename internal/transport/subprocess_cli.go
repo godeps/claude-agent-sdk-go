@@ -159,9 +159,12 @@ func (t *SubprocessCLITransport) Connect(ctx context.Context) error {
 		t.cmd.Dir = t.cwd
 	}
 
-	// Set up environment variables
-	// Start with current environment
-	t.cmd.Env = os.Environ()
+	// An explicitly isolated environment must be non-nil: exec.Cmd treats nil
+	// as inheritance. Existing callers retain merge behavior by default.
+	t.cmd.Env = []string{}
+	if t.options == nil || !t.options.ReplaceEnv {
+		t.cmd.Env = os.Environ()
+	}
 
 	// Add SDK-specific variables
 	t.cmd.Env = append(t.cmd.Env, "CLAUDE_CODE_ENTRYPOINT=agent")
@@ -188,7 +191,7 @@ func (t *SubprocessCLITransport) Connect(ctx context.Context) error {
 	// Add custom environment variables (these can override the above if needed)
 	for key, value := range t.env {
 		t.cmd.Env = append(t.cmd.Env, fmt.Sprintf("%s=%s", key, value))
-		t.logger.Debug("Setting custom environment variable: %s=%s", key, value)
+		t.logger.Debug("Setting custom environment variable: %s", key)
 	}
 
 	// Enable file checkpointing support when requested
@@ -202,22 +205,32 @@ func (t *SubprocessCLITransport) Connect(ctx context.Context) error {
 
 	t.stdin, err = t.cmd.StdinPipe()
 	if err != nil {
+		t.cleanupUnstartedCommand()
 		return types.NewCLIConnectionErrorWithCause("failed to create stdin pipe", err)
 	}
 
 	t.stdout, err = t.cmd.StdoutPipe()
 	if err != nil {
+		t.cleanupUnstartedCommand()
 		return types.NewCLIConnectionErrorWithCause("failed to create stdout pipe", err)
 	}
 
 	t.stderr, err = t.cmd.StderrPipe()
 	if err != nil {
+		t.cleanupUnstartedCommand()
 		return types.NewCLIConnectionErrorWithCause("failed to create stderr pipe", err)
 	}
 
-	// Start the process
+	if t.options != nil && t.options.CommandHook != nil {
+		if err := t.options.CommandHook(t.cmd); err != nil {
+			t.cleanupUnstartedCommand()
+			return types.NewCLIConnectionErrorWithCause("command hook rejected subprocess", err)
+		}
+	}
+	// Start the process.
 	if err := t.cmd.Start(); err != nil {
 		t.logger.Error("Failed to start subprocess: %v", err)
+		t.cleanupUnstartedCommand()
 		return types.NewCLIConnectionErrorWithCause("failed to start subprocess", err)
 	}
 	t.logger.Debug("CLI subprocess started successfully (PID: %d)", t.cmd.Process.Pid)
@@ -236,6 +249,37 @@ func (t *SubprocessCLITransport) Connect(ctx context.Context) error {
 	t.logger.Debug("Transport ready for communication")
 
 	return nil
+}
+
+// cleanupUnstartedCommand releases resources after setup fails. The caller
+// holds t.mu and the process has not started.
+func (t *SubprocessCLITransport) cleanupUnstartedCommand() {
+	if t.cancel != nil {
+		t.cancel()
+		t.cancel = nil
+	}
+	if t.stdin != nil {
+		_ = t.stdin.Close()
+		t.stdin = nil
+	}
+	if t.stdout != nil {
+		_ = t.stdout.Close()
+		t.stdout = nil
+	}
+	if t.stderr != nil {
+		_ = t.stderr.Close()
+		t.stderr = nil
+	}
+	if t.usageProxy != nil {
+		t.usageProxy.Stop()
+		t.usageProxy = nil
+	}
+	for _, path := range t.mcpConfigFiles {
+		_ = os.Remove(path)
+	}
+	t.mcpConfigFiles = nil
+	t.cmd = nil
+	t.ready = false
 }
 
 // messageReaderLoop reads JSON lines from stdout and parses them into messages.
