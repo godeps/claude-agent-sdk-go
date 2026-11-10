@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -121,11 +122,13 @@ func TestExpandHome(t *testing.T) {
 		},
 	}
 
-	// Get actual home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("Failed to get home directory: %v", err)
+	// expandHome deliberately resolves the OS account, independently of a
+	// launcher overriding HOME for an isolated working environment.
+	account, err := user.Current()
+	if err != nil || account.HomeDir == "" {
+		t.Skip("OS account home directory unavailable")
 	}
+	homeDir := account.HomeDir
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -310,14 +313,19 @@ func TestSubprocessCLITransportConnect(t *testing.T) {
 
 // TestSubprocessCLITransportWrite tests writing to subprocess
 func TestSubprocessCLITransportWrite(t *testing.T) {
-	// Use cat command as a simple echo subprocess
-	catPath, err := FindMockCLI()
+	// Keep a real stdin consumer alive; FindMockCLI may return echo, which
+	// exits immediately and makes this write race with a closed pipe.
+	catPath, err := exec.LookPath("cat")
 	if err != nil {
 		t.Skip("No cat command available for testing")
 	}
 
 	logger := log.NewLogger(false) // Non-verbose for tests
-	transport := NewSubprocessCLITransport(catPath, "", nil, logger, "", nil)
+	opts := types.NewClaudeAgentOptions().WithCommandHook(func(cmd *exec.Cmd) error {
+		cmd.Args = []string{cmd.Path} // cat must not receive Claude-specific flags.
+		return nil
+	})
+	transport := NewSubprocessCLITransport(catPath, "", nil, logger, "", opts)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

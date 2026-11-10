@@ -852,3 +852,7 @@ If you encounter issues or have questions, please file an issue on the [GitHub r
 ## Acknowledgment
 
 > This project is based on the original work at [claude-agent-sdk-go](https://github.com/schlunsen/claude-agent-sdk-go).
+
+## Host process integration
+
+See [host integration](docs/host-integration.md) for process supervision, environment isolation and protocol integration contracts.

@@ -50,6 +50,9 @@ type Query struct {
 
 	// Message handling
 	messagesChan     chan types.Message
+	messagesMu       sync.RWMutex
+	messagesClosed   bool
+	stopOnce         sync.Once
 	stopChan         chan struct{}
 	readLoopDone     chan struct{}
 	started          bool
@@ -211,9 +214,9 @@ func (q *Query) mcpServerNames() []string {
 // Start begins the control message handling loop.
 func (q *Query) Start(ctx context.Context) error {
 	q.mu.Lock()
-	if q.started {
+	if q.started || q.ctx.Err() != nil {
 		q.mu.Unlock()
-		return types.NewControlProtocolError("query already started")
+		return types.NewControlProtocolError("query already started or stopped")
 	}
 	q.started = true
 	q.mu.Unlock()
@@ -226,29 +229,47 @@ func (q *Query) Start(ctx context.Context) error {
 
 // Stop gracefully stops the query handler.
 func (q *Query) Stop(ctx context.Context) error {
-	// Signal stop
-	select {
-	case <-q.stopChan:
-		// Already stopped
+	q.stopOnce.Do(func() { close(q.stopChan); q.cancel() })
+	q.mu.Lock()
+	started := q.started
+	q.mu.Unlock()
+	if !started {
+		q.finishMessages()
 		return nil
-	default:
-		close(q.stopChan)
 	}
-
-	// Cancel context to stop all operations
-	q.cancel()
-
-	// Wait for read loop to complete
 	select {
 	case <-q.readLoopDone:
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
 
-	// Close message channel
-	close(q.messagesChan)
+// finishMessages also runs on transport EOF, so consumers and in-flight
+// requests are released without requiring the caller to notice a hung stream.
+func (q *Query) finishMessages() {
+	q.cancel()
+	q.messagesMu.Lock()
+	defer q.messagesMu.Unlock()
+	if !q.messagesClosed {
+		q.messagesClosed = true
+		close(q.messagesChan)
+	}
+}
 
-	return nil
+// sendMessage synchronizes asynchronous tool callbacks with stream closure.
+func (q *Query) sendMessage(msg types.Message) error {
+	q.messagesMu.RLock()
+	defer q.messagesMu.RUnlock()
+	if q.messagesClosed {
+		return types.NewControlProtocolError("message stream closed")
+	}
+	select {
+	case q.messagesChan <- msg:
+		return nil
+	case <-q.ctx.Done():
+		return q.ctx.Err()
+	}
 }
 
 // GetMessages returns a channel for consuming normal (non-control) messages.
@@ -259,6 +280,7 @@ func (q *Query) GetMessages(ctx context.Context) <-chan types.Message {
 // messageLoop reads messages from transport and routes them.
 func (q *Query) messageLoop() {
 	defer close(q.readLoopDone)
+	defer q.finishMessages()
 
 	messages := q.transport.ReadMessages(q.ctx)
 	q.logger.Debug("Message routing loop started")
@@ -343,12 +365,7 @@ func (q *Query) routeMessage(msg types.Message) error {
 	if q.eventTracker != nil {
 		q.eventTracker.Observe(msg)
 	}
-	select {
-	case q.messagesChan <- msg:
-		return nil
-	case <-q.ctx.Done():
-		return q.ctx.Err()
-	}
+	return q.sendMessage(msg)
 }
 
 // handleControlResponse handles a control response message.
@@ -735,6 +752,11 @@ func (q *Query) sendControlRequest(ctx context.Context, request map[string]inter
 			return nil, result.err
 		}
 		return result.response, nil
+	case <-q.ctx.Done():
+		q.mu.Lock()
+		delete(q.requestMap, requestID)
+		q.mu.Unlock()
+		return nil, types.NewControlProtocolError("transport message stream closed")
 	case <-ctx.Done():
 		q.mu.Lock()
 		delete(q.requestMap, requestID)
@@ -941,10 +963,8 @@ func (q *Query) executeToolHandler(toolName string, input map[string]interface{}
 			Input:     input,
 		}
 
-		select {
-		case q.messagesChan <- execReq:
-		case <-q.ctx.Done():
-			return nil, q.ctx.Err()
+		if err := q.sendMessage(execReq); err != nil {
+			return nil, err
 		}
 
 		// Wait for result with timeout

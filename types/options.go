@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os/exec"
 	"time"
 )
 
@@ -161,8 +162,15 @@ type ClaudeAgentOptions struct {
 	AddDirs        []string        `json:"add_dirs,omitempty"`
 
 	// Environment and extra arguments
-	Env       map[string]string  `json:"env,omitempty"`
-	ExtraArgs map[string]*string `json:"extra_args,omitempty"` // Pass arbitrary CLI flags
+	Env map[string]string `json:"env,omitempty"`
+	// ReplaceEnv starts the subprocess without inherited parent variables.
+	// Env and SDK-managed variables are still applied. The default preserves
+	// the existing behavior of merging Env into the parent environment.
+	ReplaceEnv bool `json:"replace_env,omitempty"`
+	// CommandHook runs after command setup and before Start. It must not start
+	// or wait for the command. An error prevents the subprocess from starting.
+	CommandHook func(*exec.Cmd) error `json:"-"`
+	ExtraArgs   map[string]*string    `json:"extra_args,omitempty"` // Pass arbitrary CLI flags
 
 	// Buffer configuration
 	MaxBufferSize          *int `json:"max_buffer_size,omitempty"`          // Max bytes when buffering CLI stdout
@@ -393,9 +401,21 @@ func (o *ClaudeAgentOptions) WithAddDirs(dirs ...string) *ClaudeAgentOptions {
 	return o
 }
 
-// WithEnv sets environment variables.
+// WithEnv sets environment overrides; use WithReplaceEnv to disable inheritance.
 func (o *ClaudeAgentOptions) WithEnv(env map[string]string) *ClaudeAgentOptions {
 	o.Env = env
+	return o
+}
+
+// WithReplaceEnv controls whether parent environment variables are excluded.
+func (o *ClaudeAgentOptions) WithReplaceEnv(replace bool) *ClaudeAgentOptions {
+	o.ReplaceEnv = replace
+	return o
+}
+
+// WithCommandHook configures the subprocess immediately before it starts.
+func (o *ClaudeAgentOptions) WithCommandHook(hook func(*exec.Cmd) error) *ClaudeAgentOptions {
+	o.CommandHook = hook
 	return o
 }
 
